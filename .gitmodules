@@ -1,0 +1,3 @@
+[submodule "medal"]
+	path = medal
+	url = git@github.com:pixelou/medal.git
