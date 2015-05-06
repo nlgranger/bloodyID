@@ -120,6 +120,8 @@ function database = load_hk_Qin_preprocessing(dbpath, h, w, trainingRatio)
                             session2.id(idx)];
     end
     
+    database.train_x  = database.train_x';
+    database.test_x   = database.test_x';
     database.h        = h;
     database.w        = w;
 end
