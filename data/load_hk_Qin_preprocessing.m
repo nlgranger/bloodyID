@@ -1,15 +1,15 @@
 function database = load_hk_Qin_preprocessing(dbpath, h, w, trainingRatio)
     assert(exist(dbpath, 'dir') == 7,'Path not found');
     
-    copies  = 1; % number of images by finger
+    copies  = 6; % number of images by finger
     [rh,rw] = size(imread(fullfile(dbpath, 'finger_veins', '(1)/(1).bmp')));
 
     session1.data = false(156 * copies, h*w);
     session2.data = false(156 * copies, h*w);
     session1.mask = false(156 * copies, h*w);
     session2.mask = false(156 * copies, h*w);
-    session1.id   = zeros(156 * copies, 1, 'uint32');
-    session2.id   = zeros(156 * copies, 1, 'uint32');
+    session1.id   = zeros(156 * copies, 1, 'int32');
+    session2.id   = zeros(156 * copies, 1, 'int32');
     
     database = {};
     database.train_x = false(0,h*w);
@@ -39,10 +39,16 @@ function database = load_hk_Qin_preprocessing(dbpath, h, w, trainingRatio)
             end
             n2 = n2 + 1;
             id = str2double(subDir.name(2:end-4));
+            if id == 0
+                pause;
+            end
             isFirstSession = false;
         else
             n1 = n1 + 1;
             id = str2double(subDir.name(2:end-1));
+            if id == 0
+                pause;
+            end
             isFirstSession = true;
         end
         fprintf(1, '%d\n', id);
@@ -73,6 +79,7 @@ function database = load_hk_Qin_preprocessing(dbpath, h, w, trainingRatio)
     % participants of session 1 only serve for training
     s1only      = setdiff(session1.id, session2.id);
     both        = intersect(session1.id, session2.id);
+    both        = both(randperm(numel(both)));
     nbmoretrain = max(0, ntrain - length(s1only));
     
     for i = 1:numel(s1only)
@@ -100,7 +107,7 @@ function database = load_hk_Qin_preprocessing(dbpath, h, w, trainingRatio)
         database.train_m = [database.train_m;
                             session2.mask(idx,:)];
         database.train_y = [database.train_y;
-                            session2.id(idx)];
+                            -1 * session2.id(idx)];
     end
     for i = round(nbmoretrain/2)+1:numel(both)
         t = both(i);
@@ -117,7 +124,7 @@ function database = load_hk_Qin_preprocessing(dbpath, h, w, trainingRatio)
         database.test_m = [database.test_m;
                             session2.mask(idx,:)];
         database.test_y = [database.test_y;
-                            session2.id(idx)];
+                           -1 * session2.id(idx)];
     end
     
     database.train_x  = database.train_x';
