@@ -55,9 +55,9 @@ function database = load_hk_Qin_preprocessing(dbpath, h, w, trainingRatio)
         for i = 1:copies
             imFileName = sprintf('(%d).bmp', round(i + 6 * ~isFirstSession));
             imv = imread(fullfile(veinsPath, subDir.name, imFileName));
-            imv = imresize(imv, [h w], 'bilinear') > 0;
+            imv = imresize(imv, [h w], 'bilinear') > 128;
             imm = imread(fullfile(masksPath, subDir.name, imFileName));
-            imm = imresize(imm, [h w], 'bilinear') > 0;
+            imm = imresize(imm, [h w], 'bilinear') > 128;
             
             if isFirstSession
                 session1.data((n1-1)*copies+i,:) = reshape(imv, 1, h*w);
