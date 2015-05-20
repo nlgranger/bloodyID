@@ -1,7 +1,7 @@
 h             = 39;
 w             = 96;
-nMatching     = 1; % number of matching pairs for each image
-nNonMatching  = 3; % number of non matching pairs for each image
+nMatching     = 4; % number of matching pairs for each image
+nNonMatching  = 4; % number of non matching pairs for each image
 
 %% load initial data
 
@@ -13,82 +13,91 @@ nNonMatching  = 3; % number of non matching pairs for each image
 % h       : height of the images
 % w       : width of the images
 
-if exist('data/hk_Qin_preprocessing.mat', 'file')
-    load('data/hk_Qin_preprocessing.mat');
-else % load images and build data pairs
-    database = load_hk_Qin_preprocessing('./data/hk_Qin_preprocessing', h, w, 0.6);
-    Na = numel(database.train_y);
-    Nt = numel(database.test_y);
-    save('data/hk_Qin_preprocessing.mat', 'database', 'Na', 'Nt', 'nPairs');
-end
+load('data/hk_Qin_preprocessing/dataset.mat');
 
-%% Extraction layers
+%% Create Network
 
-RBMpretrainingOpts = struct( ...
-    'lRate', 0.005, ...
-    'momentum', 0.6, ...
-    'nEpochs', 100, ...
-    'batchSz', 60, ...
-    'nGS', 1, ...
-    'dropoutVis', 0.5, ...
-    'wPenalty', 0.001, ...
-    'wDecayDelay', 0, ...
-    'sparsity', 0.10, ...
-    'sparseGain', 2, ...
-    'displayEvery', 5);
-
-RBMtrainOpts = struct( ...
-    'lRate', 1, ...
-    'displayEvery', 5);
 trainOpts = struct('nIter', 100, ...
                    'batchSz', 60, ...
                    'skipBelow', 2, ...
                    'displayEvery', 5);
 
+wholeNet   = MultiLayerNet(trainOpts);
+
+%% Extraction layers
+
+RBMpretrainingOpts = struct( ...
+    'lRate', 0.007, ...
+    'momentum', 0.6, ...
+    'nEpochs', 400, ...
+    'batchSz', 100, ...
+    'nGS', 1, ...
+    'dropoutVis', 0.4, ...
+    'wPenalty', 0.03, ...
+    'wDecayDelay', 10, ...
+    'sparsity', 0.04, ...
+    'sparseGain', 7, ...
+    'displayEvery', 5);
+
+RBMtrainOpts = struct( ...
+    'lRate', 1, ...
+    'displayEvery', 5);
+
 extractionNet = MultiLayerNet(struct());
                
 % layer 1
-rbm = RBM(h*w, 200, RBMpretrainingOpts, RBMtrainOpts);
+rbm = RBM(h*w, 300, RBMpretrainingOpts, RBMtrainOpts);
 extractionNet.add(rbm);
 
 % layer 2
-rbm = RBM(200, 100, RBMpretrainingOpts, RBMtrainOpts);
+rbm = RBM(300, 100, RBMpretrainingOpts, RBMtrainOpts);
 extractionNet.add(rbm);
 
-extractionNet.pretrain(database.train_x);
+extractionNet.pretrain(database.pretrain_x);
 
 %% Comparison layers
 
-wholeNet   = MultiLayerNet(trainOpts);
-reshapeNet = ReshapeNet(h*w*2, {h*w, h*w});
-wholeNet.add(reshapeNet);
-
 % Duplicate extraction network
-comparePreTrainOpts = struct('skip', true);
-compareNet = CompareNet(extractionNet, 2, comparePreTrainOpts);
+compareNet = CompareNet(extractionNet, 2, struct());
 wholeNet.add(compareNet);
 
 reshapeNet = ReshapeNet(compareNet, 200);
 wholeNet.add(reshapeNet);
 
 RBMtrainOpts = struct( ...
-    'lRate', 1, ...
+    'lRate', 0.1, ...
     'decayNorm', 2, ...
     'decayRate', 0.05, ...
     'displayEvery', 5);
 
-% layer 3
-rbm = RBM(200, 50, RBMpretrainingOpts, RBMtrainOpts);
-wholeNet.add(rbm);
+% % layer 3
+% rbm = RBM(200, 50, RBMpretrainingOpts, RBMtrainOpts);
+% wholeNet.add(rbm);
+% 
+% % layer 4
+% rbm = RBM(50, 1, RBMpretrainingOpts, RBMtrainOpts);
+% wholeNet.add(rbm);
 
-% layer 4
-rbm = RBM(50, 1, RBMpretrainingOpts, RBMtrainOpts);
-wholeNet.add(rbm);
+database2 = {};
+[database2.train_x, database2.train_y] = makepairs(database.train_x, database.train_y, nMatching, nNonMatching);
+[database2.val_x, database2.val_y] = makepairs(database.val_x, database.val_y, nMatching, nNonMatching);
+[database2.test_x, database2.test_y] = makepairs(database.test_x, database.test_y, nMatching, nNonMatching);
 
-database = makepairs(database, nMatching, nNonMatching);
+save('data/workspaces/veinDBN.mat', 'wholeNet', 'database2');
 
 %% Training
-% wholeNet.train(database.train_x, database.train_y);
+
+Xa = wholeNet.compute(database2.train_x);
+Xv = wholeNet.compute(database2.val_x);
+Xt = wholeNet.compute(database2.test_x);
+Ya = database2.train_y;
+Yv = database2.val_y;
+Yt = database2.test_y;
+
+save('/tmp/features.mat', 'Xa', 'Xv', 'Xt', 'Ya', 'Yv', 'Yt');
+clear all
+load '/tmp/features.mat'
+svmcrossval(Xa, Ya, Xv, Yv);
 
 %% Testing
 
