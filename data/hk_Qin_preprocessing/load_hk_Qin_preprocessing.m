@@ -52,42 +52,50 @@ pairs     = cell(2,1);
 pairs{1}  = false(h, w, 0);
 pairs{2}  = false(h, w, 0);
 y         = false(1,0);
-category  = zeros(1,0, 'int32');
-pretrain  = true(size(x, 3), 1); % samples marked for pretraining
+category  = zeros(numel(ids), 1, 'int32');
+
+% choose categories
+for id = 1:312
+    fromS1 = find(ids == id & ses == 1, copies);
+    fromS2 = find(ids == id & ses == 2, copies);
+    
+    if isempty(fromS2)
+        category(fromS1) = 4;
+    else
+        c = rand();
+        if c < trainRatio
+            category(fromS1) = 1;
+            category(fromS2) = 1;
+        elseif c < trainRatio + valRatio
+            category(fromS1) = 2;
+            category(fromS2) = 2;
+        else
+            category(fromS1) = 3;
+            category(fromS2) = 3;
+        end
+    end
+end
 
 for id = 1:210
     fromS1 = find(ids == id & ses == 1, copies);
     fromS2 = find(ids == id & ses == 2, copies);
+    c = category(fromS1(1));
     
-    % choose category
-    c = rand();
-    if c < trainRatio
-        c = 1;
-    elseif c < trainRatio + valRatio
-        c = 2;
-    else
-        c = 3;
-        pretrain(fromS1) = false;
-        pretrain(fromS2) = false;
-    end
-    
-    nonpeers = find(ids ~= id);
+    nonpeers = find(ids ~= id & category == c);
     for i = 1: numel(fromS1)
         s = fromS1(i);
         shuffle  = randperm(copies, nMatching);
         pairs{1} = cat(3, pairs{1}, repmat(x(:,:,s), 1, 1, nMatching));
         pairs{2} = cat(3, pairs{2}, x(:,:,fromS2(shuffle)));
         y        = [y; true(nMatching, 1)];
-        category = [category; c * ones(nMatching, 1)];
         shuffle  = randperm(copies, nNonMatching);
         pairs{1} = cat(3, pairs{1}, repmat(x(:,:,s), 1, 1, nNonMatching));
         pairs{2} = cat(3, pairs{2}, x(:,:, nonpeers(shuffle)));
         y        = [y; false(nNonMatching, 1)];
-        category = [category; c * ones(nNonMatching, 1)];
     end
 end
 
-dataset.pretrain_x = x(:,:, pretrain);
+dataset.pretrain_x = x(:,:, category == 4);
 dataset.train_x    = {pairs{1}(:,:, category == 1); pairs{2}(:,:, category == 1)};
 dataset.train_y    = y(category == 1);
 dataset.val_x      = {pairs{1}(:,:, category == 2); pairs{2}(:,:, category == 2)};
