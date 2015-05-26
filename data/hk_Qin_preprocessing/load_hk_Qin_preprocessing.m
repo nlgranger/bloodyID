@@ -1,36 +1,34 @@
-h               = 39; % resised image height
-w               = 96; % resized image width
-trainingRatio   = 0.35; % proportion of training images
-validationRatio = 0.35; % proportion of validation images
+function dataset = load_hk_Qin_preprocessing(h, w, copies, ...
+    nMatching, nNonMatching, trainRatio, valRatio)
+
+% Load images
+
 dbpath = fileparts(mfilename('fullpath'));
 
-copies  = 6; % number of images by finger
 [rh, rw] = size(imread(fullfile(dbpath, 'finger_veins', '(1)/(1).bmp')));
 
-dataset = {};
-
 veinsPath = fullfile(dbpath, 'finger_veins');
-masksPath = fullfile(dbpath, 'finger_masks');
+% masksPath = fullfile(dbpath, 'finger_masks');
 veinDirs = dir(veinsPath);
 
-x   = false(h * w, 0);
-m   = false(h * w, 0);
+x   = false(h, w, 0);
+% m   = false(h * w, 0);
 ids = zeros(0, 1, 'int32');
+ses = zeros(0, 1, 'int32');
 
 for d = 1:length(veinDirs)
     subDir = veinDirs(d);
-    if ~subDir.isdir ...
-        || strcmp(subDir.name,'.') ...
-        || strcmp(subDir.name, '..')
+    if ~subDir.isdir || strcmp(subDir.name,'.') || strcmp(subDir.name, '..')
         continue
     else
         isS2 = strcmp(subDir.name(end-1:end), 's2');
-        imv = imread(fullfile(veinsPath, subDir.name, sprintf('(%d).bmp', 1 + 6 * isS2)));
+        fName = sprintf('(%d).bmp', 1 + 6 * isS2);
+        imv = imread(fullfile(veinsPath, subDir.name, fName));
         if size(imv, 1) ~= rh || size(imv, 2) ~= rw % skip corrupted files
             continue;
         end
         if isS2
-            id = - str2double(subDir.name(2:end-4));
+            id = str2double(subDir.name(2:end-4));
         else
             id = str2double(subDir.name(2:end-1));
         end
@@ -38,39 +36,62 @@ for d = 1:length(veinDirs)
             imFileName = sprintf('(%d).bmp', i + 6 * isS2);
             imv = imread(fullfile(veinsPath, subDir.name, imFileName));
             imv = imresize(imv, [h w], 'bilinear') > 128;
-            x   = [x reshape(imv, h*w, 1)];
-            imm = imread(fullfile(masksPath, subDir.name, imFileName));
-            imm = imresize(imv, [h w], 'bilinear') > 128;
-            m   = [m reshape(imm, h*w, 1)];
+            x   = cat(3, x, imv);
+            % imm = imread(fullfile(masksPath, subDir.name, imFileName));
+            % imm = imresize(imv, [h w], 'bilinear') > 128;
+            % m   = [m reshape(imm, h*w, 1)];
             ids = [ids; id];
+            ses = [ses; 1 + isS2];
         end
     end
 end
 
-s1only   = setdiff(ids, -ids);
-both     = intersect(ids, -ids);
-nBoth    = length(both);    
-shuffle  = randperm(nBoth);
+% Make pairs
 
-nTrain   = round(nBoth * trainingRatio);
-trainIds = both(shuffle(1:nTrain));
-trainIdx = sum(bsxfun(@eq, repmat(ids, 1, length(trainIds)), trainIds'), 2) > 0;
-dataset.train_x = x(:, trainIdx);
-dataset.train_y = ids(trainIdx);
+pairs     = cell(2,1);
+pairs{1}  = false(h, w, 0);
+pairs{2}  = false(h, w, 0);
+y         = false(1,0);
+category  = zeros(1,0, 'int32');
+pretrain  = true(size(x, 3), 1); % samples marked for pretraining
 
-nVal   = round(nBoth * validationRatio);
-valIds = both(shuffle(nTrain+1:nTrain+nVal));
-valIdx = sum(bsxfun(@eq, repmat(ids, 1, length(valIds)), valIds'), 2) > 0;
-dataset.val_x = x(:, valIdx);
-dataset.val_y = ids(valIdx);
+for id = 1:210
+    fromS1 = find(ids == id & ses == 1, copies);
+    fromS2 = find(ids == id & ses == 2, copies);
+    
+    % choose category
+    c = rand();
+    if c < trainRatio
+        c = 1;
+    elseif c < trainRatio + valRatio
+        c = 2;
+    else
+        c = 3;
+        pretrain(fromS1) = false;
+        pretrain(fromS2) = false;
+    end
+    
+    nonpeers = find(ids ~= id);
+    for i = 1: numel(fromS1)
+        s = fromS1(i);
+        shuffle  = randperm(copies, nMatching);
+        pairs{1} = cat(3, pairs{1}, repmat(x(:,:,s), 1, 1, nMatching));
+        pairs{2} = cat(3, pairs{2}, x(:,:,fromS2(shuffle)));
+        y        = [y; true(nMatching, 1)];
+        category = [category; c * ones(nMatching, 1)];
+        shuffle  = randperm(copies, nNonMatching);
+        pairs{1} = cat(3, pairs{1}, repmat(x(:,:,s), 1, 1, nNonMatching));
+        pairs{2} = cat(3, pairs{2}, x(:,:, nonpeers(shuffle)));
+        y        = [y; false(nNonMatching, 1)];
+        category = [category; c * ones(nNonMatching, 1)];
+    end
+end
 
-testIds = both(shuffle(nTrain+nVal+1:end));
-testIdx = sum(bsxfun(@eq, repmat(ids, 1, length(testIds)), testIds'), 2) > 0;
-dataset.test_x = x(:, testIdx);
-dataset.test_y = ids(testIdx);
-
-pretrainIdx = sum(bsxfun(@eq, repmat(ids, 1, length(s1only)), s1only'), 2) > 0;
-pretrainIdx = pretrainIdx | trainIdx | valIdx;
-dataset.pretrain_x = x(:, pretrainIdx);
-
-save('dataset.mat', 'dataset', 'h', 'w');
+dataset.pretrain_x = x(:,:, pretrain);
+dataset.train_x    = {pairs{1}(:,:, category == 1); pairs{2}(:,:, category == 1)};
+dataset.train_y    = y(category == 1);
+dataset.val_x      = {pairs{1}(:,:, category == 2); pairs{2}(:,:, category == 2)};
+dataset.val_y      = y(category == 2);
+dataset.test_x     = {pairs{1}(:,:, category == 3); pairs{2}(:,:, category == 3)};
+dataset.test_y     = y(category == 3);
+end

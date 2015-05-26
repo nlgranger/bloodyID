@@ -1,11 +1,13 @@
-h             = 39;
-w             = 96;
+h = 40;
+w = 100;
 nMatching     = 4; % number of matching pairs for each image
 nNonMatching  = 4; % number of non matching pairs for each image
+patchSz       = [20 25];
+overlap       = [10 12];
 
 %% load initial data
 
-% fill a database object with fields 
+% fill a dataset object with fields 
 % train_x : training samples pairs, nbsamples x (2*h*w) matrix
 % train_y : associated label
 % test_x  : same as train_x for testing
@@ -15,7 +17,57 @@ nNonMatching  = 4; % number of non matching pairs for each image
 
 load('data/hk_Qin_preprocessing/dataset.mat');
 
-%% Create Network
+%% Extraction layers
+
+RBMtrainOpts = struct( ...
+    'lRate', 0.1, ...
+    'displayEvery', 5);
+
+extractionNet = MultiLayerNet(struct());
+
+patchMaker = PatchNet([h, w], patchSz, overlap);
+extractionNet.add(patchMaker);
+
+patchRedux = MultiLayerNet(struct());
+
+RBMpretrainingOpts = struct( ...
+    'lRate', 0.05, ...
+    'momentum', 0.6, ...
+    'nEpochs', 200, ...
+    'batchSz', 300, ...
+    'dropoutVis', 0.4, ...
+    'wPenalty', 0.005, ...
+    'wDecayDelay', 0, ...
+    'selectivity', 0.1, ...
+    'selectivityGain', 0.5, ...
+    'sparsity', 0.05, ...
+    'sparseGain', 0.1, ...
+    'displayEvery', 5);
+rbm = RBM(prod(patchSz), 70, RBMpretrainingOpts, RBMtrainOpts);
+patchRedux.add(rbm);
+RBMpretrainingOpts = struct( ...
+    'lRate', 0.1, ...
+    'momentum', 0.6, ...
+    'nEpochs', 300, ...
+    'batchSz', 300, ...
+    'dropoutVis', 0.4, ...
+    'wPenalty', 0.01, ...
+    'wDecayDelay', 10, ...
+    'sparsity', 0.05, ...
+    'sparseGain', 0.1, ...
+    'displayEvery', 5);
+rbm = RBM(70, 20, RBMpretrainingOpts, RBMtrainOpts);
+patchRedux.add(rbm);
+
+imRedux = CompareNet(patchRedux, numel(patchMaker.outsize()));
+extractionNet.add(imRedux);
+
+patchMerge = ReshapeNet(imRedux, sum(cellfun(@prod, imRedux.outsize())));
+extractionNet.add(patchMerge);
+
+extractionNet.pretrain(dataset.pretrain_x);
+
+%% Comparison layers
 
 trainOpts = struct('nIter', 100, ...
                    'batchSz', 60, ...
@@ -24,44 +76,11 @@ trainOpts = struct('nIter', 100, ...
 
 wholeNet   = MultiLayerNet(trainOpts);
 
-%% Extraction layers
-
-RBMpretrainingOpts = struct( ...
-    'lRate', 0.007, ...
-    'momentum', 0.6, ...
-    'nEpochs', 400, ...
-    'batchSz', 100, ...
-    'nGS', 1, ...
-    'dropoutVis', 0.4, ...
-    'wPenalty', 0.03, ...
-    'wDecayDelay', 10, ...
-    'sparsity', 0.04, ...
-    'sparseGain', 7, ...
-    'displayEvery', 5);
-
-RBMtrainOpts = struct( ...
-    'lRate', 1, ...
-    'displayEvery', 5);
-
-extractionNet = MultiLayerNet(struct());
-               
-% layer 1
-rbm = RBM(h*w, 300, RBMpretrainingOpts, RBMtrainOpts);
-extractionNet.add(rbm);
-
-% layer 2
-rbm = RBM(300, 100, RBMpretrainingOpts, RBMtrainOpts);
-extractionNet.add(rbm);
-
-extractionNet.pretrain(database.pretrain_x);
-
-%% Comparison layers
-
 % Duplicate extraction network
-compareNet = CompareNet(extractionNet, 2, struct());
+compareNet = CompareNet(extractionNet, 2);
 wholeNet.add(compareNet);
 
-reshapeNet = ReshapeNet(compareNet, 200);
+reshapeNet = ReshapeNet(compareNet, 720);
 wholeNet.add(reshapeNet);
 
 RBMtrainOpts = struct( ...
@@ -70,46 +89,31 @@ RBMtrainOpts = struct( ...
     'decayRate', 0.05, ...
     'displayEvery', 5);
 
-% % layer 3
-% rbm = RBM(200, 50, RBMpretrainingOpts, RBMtrainOpts);
-% wholeNet.add(rbm);
-% 
-% % layer 4
-% rbm = RBM(50, 1, RBMpretrainingOpts, RBMtrainOpts);
-% wholeNet.add(rbm);
+% layer 3
+rbm = RBM(wholeNet.outsize(), 50, RBMpretrainingOpts, RBMtrainOpts);
+wholeNet.add(rbm);
 
-database2 = {};
-[database2.train_x, database2.train_y] = makepairs(database.train_x, database.train_y, nMatching, nNonMatching);
-[database2.val_x, database2.val_y] = makepairs(database.val_x, database.val_y, nMatching, nNonMatching);
-[database2.test_x, database2.test_y] = makepairs(database.test_x, database.test_y, nMatching, nNonMatching);
+% layer 4
+rbm = RBM(50, 1, RBMpretrainingOpts, RBMtrainOpts);
+wholeNet.add(rbm);
 
-save('data/workspaces/veinDBN.mat', 'wholeNet', 'database2');
+save('data/workspaces/veinDBN.mat', 'wholeNet');
 
 %% Training
 
-Xa = wholeNet.compute(database2.train_x);
-Xv = wholeNet.compute(database2.val_x);
-Xt = wholeNet.compute(database2.test_x);
-Ya = database2.train_y;
-Yv = database2.val_y;
-Yt = database2.test_y;
 
-save('/tmp/features.mat', 'Xa', 'Xv', 'Xt', 'Ya', 'Yv', 'Yt');
-clear all
-load '/tmp/features.mat'
-svmcrossval(Xa, Ya, Xv, Yv);
 
 %% Testing
 
-% Xa = wholeNet.compute(database.train_x);
-% Xt = wholeNet.compute(database.test_x);
+% Xa = wholeNet.compute(dataset.train_x);
+% Xt = wholeNet.compute(dataset.test_x);
 % 
-% SVMModel = fitcsvm(Xa',database.train_y,'KernelFunction','rbf', 'OutlierFraction',0.05);
+% SVMModel = fitcsvm(Xa',dataset.train_y,'KernelFunction','rbf', 'OutlierFraction',0.05);
 % y = predict(SVMModel,Xa');
-% m = y ~= database.train_y;
-% fprintf(1, 'Training fpr : %f\n', mean(m(~database.train_y)));
-% fprintf(1, '         frr : %f\n', mean(m(database.train_y)));
+% m = y ~= dataset.train_y;
+% fprintf(1, 'Training fpr : %f\n', mean(m(~dataset.train_y)));
+% fprintf(1, '         frr : %f\n', mean(m(dataset.train_y)));
 % y = predict(SVMModel,Xt');
-% m = y ~= database.test_y;
-% fprintf(1, 'Testing  fpr : %f\n', mean(m(~database.test_y)));
-% fprintf(1, '         frr : %f\n', mean(m(database.test_y)));
+% m = y ~= dataset.test_y;
+% fprintf(1, 'Testing  fpr : %f\n', mean(m(~dataset.test_y)));
+% fprintf(1, '         frr : %f\n', mean(m(dataset.test_y)));
