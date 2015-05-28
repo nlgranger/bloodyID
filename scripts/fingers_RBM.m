@@ -95,7 +95,7 @@ RBMpretrainingOpts = struct( ...
 RBMtrainOpts = struct('lRate', 0.2);
 
 rbm = RBM(wholeNet.outsize(), 20, RBMpretrainingOpts, RBMtrainOpts);
-rbm.W = [rbm.W(1:126,:); -rbm.W(1:126,:)];
+rbm.W = [abs(rbm.W(1:108,:)); -abs(rbm.W(1:108,:))];
 wholeNet.add(rbm);
 
 rbm = RBM(20, 1, RBMpretrainingOpts, RBMtrainOpts);
@@ -108,11 +108,11 @@ save('data/workspaces/pretrained.mat', 'wholeNet', 'extractionNet');
 wholeNet.train(dataset.train_x, dataset.train_y);
 
 o = wholeNet.compute(dataset.test_x);
-m = o>0.37 ~= dataset.test_y';
+m = o>0.45 ~= dataset.test_y';
 mean(m(dataset.test_y))
 mean(m(~dataset.test_y))
 o = wholeNet.compute(dataset.train_x);
-m = o>0.37 ~= dataset.train_y';
+m = o>0.45 ~= dataset.train_y';
 mean(m(dataset.train_y))
 mean(m(~dataset.train_y))
 
