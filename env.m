@@ -1,5 +1,4 @@
-addpath('./medal/models/');
-addpath('./medal/');
+addpath('./nnbox');
 addpath('./utils');
 addpath('./scripts');
 addpath('./tests');
