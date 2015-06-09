@@ -1,4 +1,4 @@
-function [O, mask] = enhancement(I, patchSize)
+function [O, mask] = enhancement(I,mask, patchSize)
   [h,w] = size(I);
   
 %  colormap('gray');
@@ -7,7 +7,6 @@ function [O, mask] = enhancement(I, patchSize)
 %  axis equal;
   
   O = double(I);
-  mask = I > 0;
   
   % spread histogram
   m = min(O(mask));
