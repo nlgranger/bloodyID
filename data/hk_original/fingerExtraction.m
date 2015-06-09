@@ -52,7 +52,12 @@ for k = 1:n
         M(idx) = 0;
     end
 end
+
 M = imclose(M, strel('disk', 6));
-% M = imfill(M, 'holes');
-O = O .* uint8(M);
+M = imfill(M, 'holes');
+
+% Find ROI
+hist = filter2(ones(1,40), sum(O .* uint8(M)));
+find
+
 end
