@@ -3,7 +3,8 @@ valRatio     = 0;
 nMatching    = 4;
 nNonMatching = 6;
 h = 100;
-w = 200;
+ratio = 2.3;
+w = round(ratio * 200);
 
 curDir = fileparts(mfilename('fullpath'));
 
