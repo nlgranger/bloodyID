@@ -91,9 +91,8 @@ O = imresize(O, [h round(ratio*h)]);
 
 % Spread histogram
 M2    = bwmorph(M, 'erode', 8);
-[~, bins] = hist(O(M2));
-mini  = bins(1);
-maxi  = bins(end);
-O     = max(min(tanh((O-mini)/(maxi-mini))*255, 255), 0);
-O(~M) = 0;
+m     = mean(O(M2));
+s     = std(O(M2));
+O     = uint8(mat2gray(tanh((O-m)/(2*s)).*double(M))*255);
+O(~M) = 255;
 end

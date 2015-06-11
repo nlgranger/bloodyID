@@ -74,8 +74,8 @@ for id = 1:312
     fromS1 = find(I == id & S == 1, 6);
     fromS2 = find(I == id & S == 2, 6);
     
-    if numel(fromS1) == 0 || numel(fromS2) < nMatching || id == 35
-            category([fromS2; fromS2]) = 4;
+    if isempty(fromS1) || numel(fromS2) < nMatching || id == 35
+            category([fromS1; fromS2]) = 4;
     else
         c = rand();
         if c < trainRatio
@@ -99,6 +99,9 @@ y         = false(1,0);
 for id = [1:105 157:261]
     fromS1 = find(I == id & S == 1, 6);
     fromS2 = find(I == id & S == 2, 6);
+    if isempty(fromS1) || category(fromS1(1)) == 4
+        continue % this is a pretraining sample
+    end
     c = category(fromS1(1));
     paircat = [paircat; repmat(c, numel(fromS1) * (nMatching+nNonMatching), 1)];
     
