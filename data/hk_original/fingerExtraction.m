@@ -1,5 +1,4 @@
-function [O, M] = fingerExtraction(I)
-ratio = 2.3;
+function [O, M] = fingerExtraction(I, h, ratio)
 
 M = I < 245;
 M = imopen(M, strel('disk', 5));
@@ -37,7 +36,7 @@ if ~any(any(M))
     return
 end
 
-M = imfill(imclose(M, strel('disk', 5)));
+M = imfill(imclose(M, strel('disk', 5)), 'holes');
 
 [y, x] = find(M);
 tmp = cov(x, y);
@@ -46,11 +45,15 @@ R = imrotate(R, a*180/pi, 'bilinear');
 M = imrotate(M, a*180/pi, 'bilinear');
 
 right = find(M(round(size(M, 1)/2), :), 1, 'last');
-his   = filter2(ones(1,40), sum(R .* uint8(M))./(sum(M)+1));
-his   = filter2(ones(1,20), his)/800;
-dipj  = find(1:numel(his)-2 < right - 40 ...
-    & abs(.5 * (his(1:end-2) - his(3:end))) < 0.1 ...
-    & .5 * (his(1:end-2) + his(3:end)) <= his(2:end-1), 1, 'last') + 1;
+his   = filter2(ones(1,30), sum(R .* uint8(M))./(sum(M)+1));
+his   = filter2(ones(1,15), his)/(30*15);
+% subplot(2,1,2);plot(his)
+d     = .5 * (his(11:end-12) - his(13:end-10));
+dipj  = find(11:numel(his)-12 < right - 50 ... % crop region
+    & 11:numel(his)-12 > 280 ... % crop region
+    & abs(d) < 0.05 ... % null derivative
+    & .5 * (his(1:end-22) + his(23:end)) <= his(12:end-11), ... % curvature
+    1, 'first') + 11;
 if numel(dipj) == 0 || dipj <= left+200
     O = [];
     M = [];
@@ -58,7 +61,9 @@ if numel(dipj) == 0 || dipj <= left+200
 end
 
 % define ROI
-height = round(mean(sum(M(:, dipj-120:dipj+60))));
+[his, centers] = hist(sum(M(:, dipj-120:dipj+60)));
+[~, tmp] = max(his);
+height = round(centers(tmp));
 width  = round(ratio*height);
 [y, ~] = find(M(:, dipj-120:dipj+60));
 m = mean(y);
@@ -81,12 +86,14 @@ O  = tanh((O - bg)/20);
 % Cut ROI and resize
 O = O(y:y+height, x:x+width);
 M = M(y:y+height, x:x+width);
-M = imresize(M, [100 round(ratio*100)]);
-O = imresize(O, [100 round(ratio*100)]);
+M = imresize(M, [h round(ratio*h)]);
+O = imresize(O, [h round(ratio*h)]);
 
 % Spread histogram
-mini  = min(O(M));
-maxi  = max(O(M));
-O     = (O-mini)*255/(maxi-mini);
+M2    = bwmorph(M, 'erode', 8);
+[~, bins] = hist(O(M2));
+mini  = bins(1);
+maxi  = bins(end);
+O     = max(min(tanh((O-mini)/(maxi-mini))*255, 255), 0);
 O(~M) = 0;
 end
