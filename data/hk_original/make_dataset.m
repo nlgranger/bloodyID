@@ -2,7 +2,7 @@ trainRatio   = 0.7;
 valRatio     = 0;
 nMatching    = 4;
 nNonMatching = 6;
-h = 100;
+h = 35;
 ratio = 2.3;
 w = round(ratio * h);
 
@@ -91,10 +91,10 @@ end
 % Make pairs
 fprintf(1, 'Building pairs...\n');
 pairs     = cell(2,1);
-paircat   = zeros(0, 1, 'int32');
-pairs{1}  = zeros(h, w, 'uint8');
-pairs{2}  = zeros(h, w, 'uint8');
-y         = false(1,0);
+paircat   = zeros(1, 0, 'int32');
+pairs{1}  = zeros(h, w, 0);
+pairs{2}  = zeros(h, w, 0);
+y         = false(1, 0);
 
 for id = [1:105 157:261]
     fromS1 = find(I == id & S == 1, 6);
@@ -120,13 +120,17 @@ end
 
 % Build dataset
 fprintf(1, 'Packing up dataset...\n');
+clear dataset
 dataset.category   = category;
-dataset.pretrain_x = X(:,:, (category == 1) | (category == 4));
-dataset.train_x    = {pairs{1}(:,:, paircat == 1); pairs{2}(:,:, paircat == 1)};
+dataset.pretrain_x = double(X(:,:, (category == 1) | (category == 4)));
+dataset.train_x    = {double(pairs{1}(:,:, paircat == 1)); ...
+                      double(pairs{2}(:,:, paircat == 1))};
 dataset.train_y    = y(paircat == 1);
-dataset.val_x      = {pairs{1}(:,:, paircat == 2); pairs{2}(:,:, paircat == 2)};
+dataset.val_x      = {double(pairs{1}(:,:, paircat == 2)); ...
+                      double(pairs{2}(:,:, paircat == 2))};
 dataset.val_y      = y(paircat == 2);
-dataset.test_x     = {pairs{1}(:,:, paircat == 3); pairs{2}(:,:, paircat == 3)};
+dataset.test_x     = {double(pairs{1}(:,:, paircat == 3)); ...
+                      double(pairs{2}(:,:, paircat == 3))};
 dataset.test_y     = y(paircat == 3);
 
 fprintf(1, 'Saving dataset...\n');

@@ -93,6 +93,5 @@ O = imresize(O, [h round(ratio*h)]);
 M2    = bwmorph(M, 'erode', 8);
 m     = mean(O(M2));
 s     = std(O(M2));
-O     = uint8(mat2gray(tanh((O-m)/(2*s)).*double(M))*255);
-O(~M) = 255;
+O     = tanh((O-m)/(2*s)).*double(M);
 end
