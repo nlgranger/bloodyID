@@ -1,3 +1,5 @@
+
+
 h     = 35;
 ratio = 2.3;
 w     = round(ratio*h);
@@ -8,20 +10,12 @@ overlap      = [5 11];
 
 %% load initial data
 
-% fill a dataset object with fields 
-% train_x : training samples pairs, nbsamples x (2*h*w) matrix
-% train_y : associated label
-% test_x  : same as train_x for testing
-% test_y  : same as train_y for testing
-% h       : height of the images
-% w       : width of the images
-
-load('data/hk_original/dataset.mat');
-dataset.pretrain_x = 0.5 * (dataset.pretrain_x + 1);
-dataset.train_x{1} = 0.5 * (dataset.train_x{1} + 1);
-dataset.train_x{2} = 0.5 * (dataset.train_x{2} + 1);
-dataset.test_x{1}  = 0.5 * (dataset.test_x{1} + 1);
-dataset.test_x{2}  = 0.5 * (dataset.test_x{2} + 1);
+% load('data/hk_original/dataset.mat');
+% dataset.pretrain_x = 0.5 * (dataset.pretrain_x + 1);
+% dataset.train_x{1} = 0.5 * (dataset.train_x{1} + 1);
+% dataset.train_x{2} = 0.5 * (dataset.train_x{2} + 1);
+% dataset.test_x{1}  = 0.5 * (dataset.test_x{1} + 1);
+% dataset.test_x{2}  = 0.5 * (dataset.test_x{2} + 1);
 
 %% Extraction layers
 
@@ -31,15 +25,12 @@ patchMaker = PatchNet([h, w], patchSz, overlap);
 extractionNet.add(patchMaker);
 
 patchRedux = MultiLayerNet(struct());
-RBMtrainOpts = struct('lRate', 1);
+RBMtrainOpts = struct('lRate', 0.05);
 RBMpretrainingOpts = struct( ...
     'lRate', 0.00001, ...
     'momentum', 0.5, ...
-    'nEpochs', 60, ...
-    'batchSz', 300, ...
-    'dropout', 0.3, ...
-    'decayNorm', 1, ...
-    'decayRate', 0.00005, ...
+    'nEpochs', 90, ...
+    'batchSz', 600, ...
     'displayEvery', 5);
 rbm = RELURBM(prod(patchSz), 100, RBMpretrainingOpts, RBMtrainOpts);
 patchRedux.add(rbm);
@@ -54,15 +45,12 @@ extractionNet.add(imRedux);
 patchMerge = ReshapeNet(imRedux, sum(cellfun(@prod, imRedux.outsize())));
 extractionNet.add(patchMerge);
 
-RBMtrainOpts = struct('lRate', 1);
+RBMtrainOpts = struct('lRate', 0.05);
 RBMpretrainingOpts = struct( ...
-    'lRate', 0.00002, ...
-    'momentum', 0.9, ...
-    'nEpochs', 100, ...
-    'batchSz', 100, ...
-    'dropout', 0.3, ...
-    'decayNorm', 1, ...
-    'decayRate', 0.00005, ...
+    'lRate', 0.00001, ...
+    'momentum', 0.5, ...
+    'nEpochs', 70, ...
+    'batchSz', 300, ...
     'displayEvery', 5);
 rbm = RELURBM(100 * numel(patchMaker.outsize()), 200, RBMpretrainingOpts, RBMtrainOpts);
 extractionNet.add(rbm);
@@ -78,7 +66,7 @@ save('data/workspaces/pretrained.mat', 'extractionNet');
 
 trainOpts = struct('nIter', 50, ...
                    'batchSz', 300, ...
-                   'displayEvery', 5);
+                   'displayEvery', 1);
 
 wholeNet  = MultiLayerNet(trainOpts);
 
@@ -86,8 +74,8 @@ wholeNet  = MultiLayerNet(trainOpts);
 compareNet = SiameseNet(extractionNet, 2, 'skipPretrain');
 wholeNet.add(compareNet);
 
-l2 = CosineCompare(100);
-wholeNet.add(l2);
+cosine = CosineCompare(100);
+wholeNet.add(cosine);
 
 %% Training
 
