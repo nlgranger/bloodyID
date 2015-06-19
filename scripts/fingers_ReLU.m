@@ -5,8 +5,8 @@ ratio = 2.3;
 w     = round(ratio*h);
 nMatching    = 4; % number of matching pairs for each image
 nNonMatching = 6; % number of non matching pairs for each image
-patchSz      = [10 23];
-overlap      = [5 11];
+patchSz      = [15 15];
+overlap      = [8 8];
 
 %% load initial data
 
@@ -24,43 +24,51 @@ extractionNet = MultiLayerNet(struct('skipBelow', 1));
 patchMaker = PatchNet([h, w], patchSz, overlap);
 extractionNet.add(patchMaker);
 
-patchRedux = MultiLayerNet(struct());
-RBMtrainOpts = struct('lRate', 0.05);
+RBMtrainOpts = struct('lRate', 0.001);
 RBMpretrainingOpts = struct( ...
-    'lRate', 0.00001, ...
+    'lRate', 2e-3, ...
     'momentum', 0.5, ...
-    'nEpochs', 90, ...
-    'batchSz', 600, ...
+    'nEpochs', 100, ...
+    'batchSz', 400, ...
+    'dropVis', 0.3, ...
+    'dropHid', 0.1, ...
+    'wPenalty', 0.001, ...
     'displayEvery', 5);
-rbm = RELURBM(prod(patchSz), 100, RBMpretrainingOpts, RBMtrainOpts);
-patchRedux.add(rbm);
+rbm = RELURBM(prod(patchSz), 70, RBMpretrainingOpts, RBMtrainOpts, false);
 
-% RBMtrainOpts = struct('lRate', 1);
-% rbm = RELURBM(200, 70, RBMpretrainingOpts, RBMtrainOpts);
-% patchRedux.add(rbm);
-
-imRedux = SiameseNet(patchRedux, numel(patchMaker.outsize()));
+imRedux = SiameseNet(rbm, numel(patchMaker.outsize()));
 extractionNet.add(imRedux);
 
 patchMerge = ReshapeNet(imRedux, sum(cellfun(@prod, imRedux.outsize())));
 extractionNet.add(patchMerge);
 
-RBMtrainOpts = struct('lRate', 0.05);
+RBMtrainOpts = struct('lRate', 0.1);
 RBMpretrainingOpts = struct( ...
-    'lRate', 0.00001, ...
+    'lRate', 1e-3, ...
     'momentum', 0.5, ...
-    'nEpochs', 70, ...
-    'batchSz', 300, ...
+    'nEpochs', 100, ...
+    'batchSz', 400, ...
     'displayEvery', 5);
-rbm = RELURBM(100 * numel(patchMaker.outsize()), 200, RBMpretrainingOpts, RBMtrainOpts);
+rbm = RELURBM(70 * numel(patchMaker.outsize()), 400, RBMpretrainingOpts, RBMtrainOpts);
 extractionNet.add(rbm);
-% RBMtrainOpts = struct('lRate', 1);
-% rbm = RELURBM(300, 150, RBMpretrainingOpts, RBMtrainOpts);
-% extractionNet.add(rbm);
 
 extractionNet.pretrain(dataset.pretrain_x);
 
 save('data/workspaces/pretrained.mat', 'extractionNet');
+o = extractionNet.nets{1}.compute(dataset.pretrain_x);
+p = extractionNet.nets{2}.compute(o);
+q = extractionNet.nets{3}.compute(p);
+W = extractionNet.nets{2}.net.W;
+for i = 1:70
+    subplot(2,1,1)
+    imagesc(reshape(W(:,i), patchSz))
+    colorbar
+    axis image
+    subplot(2,1,2)
+    hist(reshape(q(i:70:end,:), 1, []));
+    pause
+end
+
 
 %% Comparison layers
 
@@ -74,7 +82,7 @@ wholeNet  = MultiLayerNet(trainOpts);
 compareNet = SiameseNet(extractionNet, 2, 'skipPretrain');
 wholeNet.add(compareNet);
 
-cosine = CosineCompare(100);
+cosine = L2Compare(400);
 wholeNet.add(cosine);
 
 %% Training
@@ -91,11 +99,11 @@ wholeNet.add(cosine);
 wholeNet.train(dataset.train_x, dataset.train_y');
 
 o = wholeNet.compute(dataset.test_x);
-m = o > 0.48 ~= dataset.test_y';
+m = o > 0.35 ~= dataset.test_y';
 mean(m(dataset.test_y))
 mean(m(~dataset.test_y))
 o = wholeNet.compute(dataset.train_x);
-m = o > .48 ~= dataset.train_y';
+m = o > .20 ~= dataset.train_y';
 mean(m(dataset.train_y))
 mean(m(~dataset.train_y))
 

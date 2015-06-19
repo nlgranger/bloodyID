@@ -15,7 +15,12 @@ overlap       = [11 16];
 % h       : height of the images
 % w       : width of the images
 
-load('data/hk_Qin_preprocessing/dataset.mat');
+% load('data/hk_original/dataset.mat');
+% dataset.pretrain_x = 0.5 * (dataset.pretrain_x + 1);
+% dataset.train_x{1} = 0.5 * (dataset.train_x{1} + 1);
+% dataset.train_x{2} = 0.5 * (dataset.train_x{2} + 1);
+% dataset.test_x{1}  = 0.5 * (dataset.test_x{1} + 1);
+% dataset.test_x{2}  = 0.5 * (dataset.test_x{2} + 1);
 
 %% Extraction layers
 
@@ -25,23 +30,18 @@ patchMaker = PatchNet([h, w], patchSz, overlap);
 extractionNet.add(patchMaker);
 
 patchRedux = MultiLayerNet(struct());
-RBMtrainOpts = struct('lRate', 50);
+RBMtrainOpts = struct('lRate', 0.05);
 RBMpretrainingOpts = struct( ...
     'lRate', 0.05, ...
     'momentum', 0.9, ...
-    'nEpochs', 125, ...
+    'nEpochs', 30, ...
     'batchSz', 300, ...
-    'dropoutVis', 0.4, ...
-    'wPenalty', 0.005, ...
-    'wDecayDelay', 0, ...
-    'sparsity', 0.05, ...
-    'sparseGain', 1, ...
+    'dropoutHid', 0.4, ...
     'displayEvery', 5);
-rbm = RBM(prod(patchSz), 70, RBMpretrainingOpts, RBMtrainOpts);
+rbm = RBM(prod(patchSz), 60, RBMpretrainingOpts, RBMtrainOpts);
 patchRedux.add(rbm);
 
-RBMtrainOpts = struct('lRate', 5);
-rbm = RBM(70, 25, RBMpretrainingOpts, RBMtrainOpts);
+rbm = RBM(60, 25, RBMpretrainingOpts, RBMtrainOpts);
 patchRedux.add(rbm);
 
 imRedux = SiameseNet(patchRedux, numel(patchMaker.outsize()));
@@ -50,22 +50,17 @@ extractionNet.add(imRedux);
 patchMerge = ReshapeNet(imRedux, sum(cellfun(@prod, imRedux.outsize())));
 extractionNet.add(patchMerge);
 
-RBMtrainOpts = struct('lRate', 5);
+RBMtrainOpts = struct('lRate', 0.05);
 RBMpretrainingOpts = struct( ...
-    'lRate', 0.05, ...
+    'lRate', 0.07, ...
     'momentum', 0.9, ...
-    'nEpochs', 150, ...
+    'nEpochs', 30, ...
     'batchSz', 300, ...
-    'dropoutVis', 0.4, ...
-    'wPenalty', 0.005, ...
-    'wDecayDelay', 0, ...
-    'sparsity', 0.05, ...
-    'sparseGain', 0.1, ...
+    'dropoutHid', 0.4, ...
     'displayEvery', 5);
-rbm = RBM(25 * numel(patchMaker.outsize()), 300, RBMpretrainingOpts, RBMtrainOpts);
+rbm = RBM(25 * numel(patchMaker.outsize()), 200, RBMpretrainingOpts, RBMtrainOpts);
 extractionNet.add(rbm);
-RBMtrainOpts = struct('lRate', 1);
-rbm = RBM(300, 150, RBMpretrainingOpts, RBMtrainOpts);
+rbm = RBM(200, 100, RBMpretrainingOpts, RBMtrainOpts);
 extractionNet.add(rbm);
 
 extractionNet.pretrain(dataset.pretrain_x);
@@ -76,7 +71,7 @@ save('data/workspaces/pretrained.mat', 'extractionNet');
 
 trainOpts = struct('nIter', 150, ...
                    'batchSz', 300, ...
-                   'displayEvery', 5);
+                   'displayEvery', 1);
 
 wholeNet  = MultiLayerNet(trainOpts);
 
@@ -84,28 +79,28 @@ wholeNet  = MultiLayerNet(trainOpts);
 compareNet = SiameseNet(extractionNet, 2, 'skipPretrain');
 wholeNet.add(compareNet);
 
-cosine = CosineCompare(100);
+cosine = L2Compare(100);
 wholeNet.add(cosine);
 
 %% Training
 
 o = wholeNet.compute(dataset.test_x);
-m = o > 0.47 ~= dataset.test_y';
+m = o < 0.53 ~= dataset.test_y';
 mean(m(dataset.test_y))
 mean(m(~dataset.test_y))
 o = wholeNet.compute(dataset.train_x);
-m = o > .47 ~= dataset.train_y';
+m = o < .53 ~= dataset.train_y';
 mean(m(dataset.train_y))
 mean(m(~dataset.train_y))
 
-wholeNet.train(dataset.train_x, dataset.train_y');
+wholeNet.train(dataset.train_x, ~dataset.train_y');
 
 o = wholeNet.compute(dataset.test_x);
-m = o > 0.44 ~= dataset.test_y';
+m = o < 0.5 ~= dataset.test_y';
 mean(m(dataset.test_y))
 mean(m(~dataset.test_y))
 o = wholeNet.compute(dataset.train_x);
-m = o > .44 ~= dataset.train_y';
+m = o < .5 ~= dataset.train_y';
 mean(m(dataset.train_y))
 mean(m(~dataset.train_y))
 

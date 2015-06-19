@@ -2,9 +2,9 @@ trainRatio   = 0.7;
 valRatio     = 0;
 nMatching    = 4;
 nNonMatching = 6;
-h = 35;
-ratio = 2.3;
-w = round(ratio * h);
+h            = 35;
+ratio        = 2.3;
+w            = round(ratio * h);
 
 curDir = fileparts(mfilename('fullpath'));
 
