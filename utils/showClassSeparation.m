@@ -1,5 +1,6 @@
 function [] = showClassSeparation(X1, X2, label)
     D = sum((X1 - X2) .^ 2, 1);
+%     D  = min(1, sum(X1 .* X2) ./ (sum(X1.^2) .* sum(X2.^2)));
     [h1, x1] = hist(D(label),30);
 %     h1 = h1 / sum(h1);
     [h2, x2] = hist(D(~label),30);
