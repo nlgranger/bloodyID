@@ -1,4 +1,11 @@
 function [O, M] = fingerExtraction(I, h, ratio)
+%fingerExtraction extract a ROI in the finger
+%   [O, M] = fingerExtraction(I, h, ratio) returns the region of interest
+%   around the third phalangeal distal joint. The ROI takes the average
+%   height of the finger in this region and its width is computed using
+%   ratio. Horizontal alignment is 2/3 on the left of the joint and 1/3 on
+%   the right. The image is then resized to h x round(ratio*h).
+%   This function also does a little bit of contrast enhancement at the end.
 
 M = I < 245;
 M = imopen(M, strel('disk', 5));
@@ -38,7 +45,7 @@ end
 
 M = imfill(imclose(M, strel('disk', 5)), 'holes');
 
-[y, x] = find(M);
+[y, x] = find(M(50:end-20));
 tmp = cov(x, y);
 a  = atan(tmp(1,2)/var(x));
 R = imrotate(R, a*180/pi, 'bilinear');
@@ -61,16 +68,17 @@ if numel(dipj) == 0 || dipj <= left+200
 end
 
 % define ROI
-[his, centers] = hist(sum(M(:, dipj-120:dipj+60)));
-[~, tmp] = max(his);
-height = round(centers(tmp));
-width  = round(ratio*height);
+% [his, centers] = hist(sum(M(:, dipj-120:dipj+60)));
+% [~, tmp] = max(his);
+% height = round(centers(tmp));
+% width  = round(ratio*height);
+w = round(h*ratio);
 [y, ~] = find(M(:, dipj-120:dipj+60));
-m = mean(y);
-x      = round(dipj - 2/3 * width);
-y      = round(m - height/2);
+m      = mean(y);
+x      = round(dipj - 3/4 * w);
+y      = round(m - h/2);
 
-if x < 1 || x+width > size(R, 2) || y < 1 || y+height > size(R, 1)
+if x < 1 || x+w > size(R, 2) || y < 1 || y+h > size(R, 1)
     O = [];
     M = [];
     return
@@ -84,14 +92,13 @@ bg = filter2(fspecial('gaussian', [20 20], 15), bg);
 O  = tanh((O - bg)/20);
 
 % Cut ROI and resize
-O = O(y:y+height, x:x+width);
-M = M(y:y+height, x:x+width);
-M = imresize(M, [h round(ratio*h)]);
-O = imresize(O, [h round(ratio*h)]);
+O = O(y:y+h, x:x+w);
+M = M(y:y+h, x:x+w);
 
 % Spread histogram
-M2    = bwmorph(M, 'erode', 8);
+M2    = bwmorph(M, 'erode', 6);
 m     = mean(O(M2));
 s     = std(O(M2));
-O     = tanh((O-m)/(2*s)).*double(M);
+O     = tanh((O-m)/(2*s));
+O(~M2) = 1;
 end

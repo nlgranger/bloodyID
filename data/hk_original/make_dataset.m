@@ -1,11 +1,19 @@
+% ratio of training/validation individuals among the participants of both 
+% sessions, the remaining ones go to testing
 trainRatio   = 0.7;
 valRatio     = 0;
+
+% # of matching and non matching pairs from session 2 generated for each
+% sample of session 1
 nMatching    = 4;
 nNonMatching = 6;
+
+% Height and ratio (w/h) of the images
 h            = 35;
 ratio        = 2.3;
 w            = round(ratio * h);
 
+% Current directory, the script expects to fing FingerVein/ here
 curDir = fileparts(mfilename('fullpath'));
 
 % Image Loading
@@ -24,13 +32,13 @@ X = zeros(h, w, size(raw, 3));
 M = true(h, w, size(raw, 3));
 keep = true(size(raw, 3), 1);
 for i = 1:size(raw, 3)
-    [O, Ma] = fingerExtraction(raw(:,:,i), h, ratio);
+    [O, Ma] = fingerExtraction(raw(:,:,i), 150, ratio);
     if numel(O) == 0
         warning('rejected finger %d', i);
         keep(i) = false;
     else
-        X(:,:,i) = O;
-        M(:,:,i) = Ma;
+        X(:,:,i) = imresize(O, [h w]);
+        M(:,:,i) = imresize(Ma, [h w]);
     end
 end
 X = X(:,:,keep);
