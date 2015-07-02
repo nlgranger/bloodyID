@@ -7,8 +7,8 @@ valRatio     = 0;
 
 % # of matching and non matching pairs from session 2 generated for each
 % sample of session 1
-nMatching    = 5;
-nNonMatching = 8;
+nMatching    = 4;
+nNonMatching = 6;
 
 % Height and ratio (w/h) of the images
 h            = 35;
@@ -16,9 +16,9 @@ ratio        = 2.3;
 w            = round(ratio * h);
 
 % Artificial images generation
-nExtra       = 2; % # of artificial *training* images for each original one
-angleStd     = 2; % angle std deviation in degrees
-shiftStd     = 2;    % shift std deviation in pixels
+nExtra       = 0; % # of artificial *training* images for each original one
+angleStd     = 1.5; % angle std deviation in degrees
+shiftStd     = 2; % shift std deviation in pixels
 
 % path to FingerVein/ directory (not included)
 curDir = fileparts(mfilename('fullpath'));
@@ -28,38 +28,40 @@ curDir = fileparts(mfilename('fullpath'));
 % Purge existing dataset
 clear dataset
 
-% Image Loading
-fprintf(1, 'Loading image files ...\n');
-if exist(fullfile(curDir, 'raw.mat'), 'file') % use backup file if available
-    load(fullfile(curDir, 'raw.mat'));
-else
-    [X, I, S] = load_hk_original();
-    save(fullfile(curDir, 'raw.mat'), 'X', 'I', 'S');
-end
+% % Image Loading
+% fprintf(1, 'Loading image files ...\n');
+% if exist(fullfile(curDir, 'raw.mat'), 'file') % use backup file if available
+%     load(fullfile(curDir, 'raw.mat'));
+% else
+%     [X, I, S] = load_hk_original();
+%     save(fullfile(curDir, 'raw.mat'), 'X', 'I', 'S');
+% end
+% 
+% % Image Preprocessing
+% fprintf(1, 'Extracting fingers ...\n');
+% raw = X;
+% X = zeros(h, w, size(raw, 3));
+% M = true(h, w, size(raw, 3));
+% keep = true(size(raw, 3), 1);
+% for i = 1:size(raw, 3)
+%     [O, Ma] = fingerExtraction(raw(:,:,i), 150, ratio);
+%     if numel(O) == 0
+%         warning('rejected finger %d', i);
+%         keep(i) = false;
+%     else
+%         X(:,:,i) = imresize(O, [h w]);
+%         M(:,:,i) = imresize(Ma, [h w]);
+%     end
+% end
+% X = X(:,:,keep);
+% M = M(:,:,keep);
+% S = S(keep);
+% I = I(keep);
+% 
+% fprintf(1, 'Saving ...\n');
+% save(fullfile(curDir, 'preprocessed.mat'), 'M', 'X', 'I', 'S');
 
-% Image Preprocessing
-fprintf(1, 'Extracting fingers ...\n');
-raw = X;
-X = zeros(h, w, size(raw, 3));
-M = true(h, w, size(raw, 3));
-keep = true(size(raw, 3), 1);
-for i = 1:size(raw, 3)
-    [O, Ma] = fingerExtraction(raw(:,:,i), 150, ratio);
-    if numel(O) == 0
-        warning('rejected finger %d', i);
-        keep(i) = false;
-    else
-        X(:,:,i) = imresize(O, [h w]);
-        M(:,:,i) = imresize(Ma, [h w]);
-    end
-end
-X = X(:,:,keep);
-M = M(:,:,keep);
-S = S(keep);
-I = I(keep);
-
-fprintf(1, 'Saving ...\n');
-save(fullfile(curDir, 'preprocessed.mat'), 'M', 'X', 'I', 'S');
+load(fullfile(curDir, 'preprocessed.mat'));
 
 % Preview
 % colormap gray
@@ -100,7 +102,7 @@ for id = 1:312
     fromS1 = find(I == id & S == 1, 6);
     fromS2 = find(I == id & S == 2, 6);
     
-    if isempty(fromS1) || numel(fromS2)*nExtra < nMatching || id == 35
+    if isempty(fromS1) || numel(fromS2)*(1+nExtra) < nMatching || id == 35
             C([fromS1; fromS2]) = 0; % Pretraining
             nPretrain = nPretrain + numel(fromS1) + numel(fromS2);
     else
