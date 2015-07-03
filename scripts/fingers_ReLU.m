@@ -24,7 +24,7 @@ extractionNet = MultiLayerNet(struct('skipBelow', 1));
 patchMaker = PatchNet([h, w], patchSz, overlap);
 extractionNet.add(patchMaker);
 
-RBMtrainOpts = struct('lRate', 5e-3);
+RBMtrainOpts = struct('lRate', 1e-3);
 RBMpretrainingOpts = struct( ...
     'lRate', 4e-3, ...
     'momentum', 0.5, ...
@@ -44,7 +44,7 @@ extractionNet.add(imRedux);
 patchMerge = ReshapeNet(imRedux, sum(cellfun(@prod, imRedux.outsize())));
 extractionNet.add(patchMerge);
 
-RBMtrainOpts = struct('lRate', 1e-3);
+RBMtrainOpts = struct('lRate', 5e-4);
 RBMpretrainingOpts = struct( ...
     'lRate', 5e-3, ...
     'momentum', 0.5, ...
@@ -75,12 +75,12 @@ save('data/workspaces/pretrained.mat', 'extractionNet');
 %     pause
 % end
 % 
-% r = extractionNet.compute(dataset.pretrain_x);
-% for i = 1:70
-%     subplot(1,1,1)
-%     hist(reshape(r(i:70:end,:), 1, []));
-%     pause
-% end
+r = extractionNet.compute(dataset.pretrain_x);
+for i = 1:80
+    subplot(1,1,1)
+    hist(reshape(r(i:70:end,:), 1, []));
+    pause
+end
 
 
 %% Comparison layers
@@ -109,14 +109,14 @@ wholeNet.add(cosine);
 % mean(m(dataset.train_y))
 % mean(m(~dataset.train_y))
 
-wholeNet.train(dataset.train_x, 5*(~dataset.train_y)');
+wholeNet.train(dataset.train_x, 20*(~dataset.train_y)');
 
 o = wholeNet.compute(dataset.test_x);
-m = o < 1.8 ~= dataset.test_y';
+m = o < 10 ~= dataset.test_y';
 mean(m(dataset.test_y))
 mean(m(~dataset.test_y))
 o = wholeNet.compute(dataset.train_x);
-m = o < 1.8 ~= dataset.train_y';
+m = o < 10 ~= dataset.train_y';
 mean(m(dataset.train_y))
 mean(m(~dataset.train_y))
 
@@ -141,16 +141,3 @@ mean(m(~dataset.train_y))
 %     hist(wholeNet.nets{1}.net.compute(dataset.test_x{2}(:,:,i)))
 %     pause
 % end
-
-% Xa = wholeNet.compute(dataset.train_x);
-% Xt = wholeNet.compute(dataset.test_x);
-% 
-% SVMModel = fitcsvm(Xa',dataset.train_y,'KernelFunction','rbf', 'OutlierFraction',0.05);
-% y = predict(SVMModel,Xa');
-% m = y ~= dataset.train_y;
-% fprintf(1, 'Training fpr : %f\n', mean(m(~dataset.train_y)));
-% fprintf(1, '         frr : %f\n', mean(m(dataset.train_y)));
-% y = predict(SVMModel,Xt');
-% m = y ~= dataset.test_y;
-% fprintf(1, 'Testing  fpr : %f\n', mean(m(~dataset.test_y)));
-% fprintf(1, '         frr : %f\n', mean(m(dataset.test_y)));
