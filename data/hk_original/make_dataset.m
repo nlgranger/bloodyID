@@ -16,7 +16,7 @@ ratio        = 2.3;
 w            = round(ratio * h);
 
 % Artificial images generation
-nExtra       = 2; % # of artificial *training* images for each original one
+nExtra       = 0; % # of artificial *training* images for each original one
 angleStd     = 1.5; % angle std deviation in degrees
 shiftStd     = 2; % shift std deviation in pixels
 
