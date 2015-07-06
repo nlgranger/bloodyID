@@ -1,5 +1,5 @@
-function [X, I, S] = load_hk_original()
-dbPath = fullfile(fileparts(mfilename('fullpath')), 'FingerVein');
+function [X, I, S] = load_hk_original(dbPath)
+dbPath = fullfile(dbPath, 'FingerVein');
 
 repeat = 6;
 h      = 256;

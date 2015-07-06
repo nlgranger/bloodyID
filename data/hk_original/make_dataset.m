@@ -1,209 +1,203 @@
-% Configuration ------------------------------------------------------------- %
-
-% ratio of training/validation individuals among the participants of both 
-% sessions, the remaining ones go to testing
-trainRatio   = 0.7;
-valRatio     = 0;
-
-% # of matching and non matching pairs from session 2 generated for each
-% sample of session 1
-nMatching    = 4;
-nNonMatching = 6;
-
-% Height and ratio (w/h) of the images
-h            = 35;
-ratio        = 2.3;
-w            = round(ratio * h);
-
-% Artificial images generation
-nExtra       = 0; % # of artificial *training* images for each original one
-angleStd     = 1.5; % angle std deviation in degrees
-shiftStd     = 2; % shift std deviation in pixels
-
-% path to FingerVein/ directory (not included)
-curDir = fileparts(mfilename('fullpath'));
-
-% Main Script --------------------------------------------------------------- %
-
-% Purge existing dataset
-clear dataset
-
-% % Image Loading
-% fprintf(1, 'Loading image files ...\n');
-% if exist(fullfile(curDir, 'raw.mat'), 'file') % use backup file if available
-%     load(fullfile(curDir, 'raw.mat'));
-% else
-%     [X, I, S] = load_hk_original();
-%     save(fullfile(curDir, 'raw.mat'), 'X', 'I', 'S');
-% end
+function dataset = make_dataset(dbPath, sz, partition, pairing, varargin)
+% MAKE_DATASET loads Hong Kong Polytechnic University Finger Image Database
+%   dataset = MAKE_DATASET(path, [h w], [train val], [np nn]) performs the 
+%   following operations:
+%   - load images under FingerVein/ directory found in provided path
+%   - cut a ROI centered between the intermediate and distal phalanges, 
+%     images are then resized to h x w
+%   - remove background color variations and slightly improve contrast
+%   - assign individuals into categories following the proportions train and
+%     val, remaining individuals go to testing
+%   - build positive and negative pairs of images inside each partition, 
+%     np specifies the number of images of session 2 to associate to each image
+%     from session 1 when generating positive pairs and nn the number of 
+%     negative ones.
+%
+%   dataset is a structure with the following fields:
+%   TODO
 % 
-% % Image Preprocessing
-% fprintf(1, 'Extracting fingers ...\n');
-% raw = X;
-% X = zeros(h, w, size(raw, 3));
-% M = true(h, w, size(raw, 3));
-% keep = true(size(raw, 3), 1);
-% for i = 1:size(raw, 3)
-%     [O, Ma] = fingerExtraction(raw(:,:,i), 150, ratio);
-%     if numel(O) == 0
-%         warning('rejected finger %d', i);
-%         keep(i) = false;
-%     else
-%         X(:,:,i) = imresize(O, [h w]);
-%         M(:,:,i) = imresize(Ma, [h w]);
-%     end
-% end
-% X = X(:,:,keep);
-% M = M(:,:,keep);
-% S = S(keep);
-% I = I(keep);
-% 
-% fprintf(1, 'Saving ...\n');
-% save(fullfile(curDir, 'preprocessed.mat'), 'M', 'X', 'I', 'S');
+%   dataset = MAKE_DATASET(path, [h w], [train val], [np nn], 'nFolds', n) 
+%   TODO
 
-load(fullfile(curDir, 'preprocessed.mat'));
 
-% Preview
-% colormap gray
-% for i = 1:312
-%     s1 = find(I == i & S == 1);
-%     s2 = find(I == i & S == 2);
-%     for j = 1:numel(s1)
-%         subplot(6,2,2*j-1)
-%         imagesc(X(:, :, s1(j)));
-%         axis image
-%         axis off
-%     end
-%     for j = numel(s1)+1:6
-%         cla(subplot(6,2,2*j-1))
-%     end
-%     for j = 1:numel(s2)
-%         subplot(6,2,2*j)
-%         imagesc(X(:, :, s2(j)));
-%         axis image
-%         axis off
-%     end
-%     for j = numel(s2)+1:6
-%         cla(subplot(6,2,2*j-1))
-%     end
-%     pause
-% end
+% Notes for this file ------------------------------------------------------- %
+% X is a h*w*N array with the N loaded images. 
+% I is an N long vector of individual ids mapped to the dataset ones for
+% finger 1 and offset by 156 for finger 2.
+% S contain the session number, 1 or 2 for the original images or 3 and 4
+% for extra images generated from session 1 and 2 respectively.
 
-% load( fullfile(curDir, 'preprocessed.mat'))
 
-% Assign individuals to training, validation and testing
+% Parameters ---------------------------------------------------------------- %
+
+h            = sz(1);
+w            = sz(2);
+ratio        = w/h;
+trainRatio   = partition(1);
+valRatio     = partition(2);
+nMatching    = pairing(1);
+nNonMatching = pairing(2);
+
+assert(mod(numel(varargin), 2) == 0, 'options should be ''name'', value pairs');
+for i = 1:2:numel(varargin)
+    if strcmp(varargin{i}, 'nExtra')
+        nExtra = varargin{i+1};
+        angleStd     = 1.5; % angle std deviation in degrees
+        shiftStd     = 2;   % shift std deviation in pixels
+    elseif strcmp(varargin{i}, 'nFolds')
+        nFolds = varargin{i+1};
+    elseif strcmp(varargin{i}, 'preprocessed')
+        preprocessed = varargin{i+1};
+    else
+        error('unknown option ''%s''', varargin{i});
+    end
+end
+
+
+% Image Loading ------------------------------------------------------------- %
+
+fprintf(1, 'Loading image files ...\n');
+if ~(exist('preprocessed', 'var') && exist(preprocessed, 'file'))
+    if exist(fullfile(dbPath, 'raw.mat'), 'file')
+        load(fullfile(dbPath, 'raw.mat'));
+    else
+        [X, I, S] = load_hk_original(dbPath);
+        save(fullfile(dbPath, 'raw.mat'), 'X', 'I', 'S');
+    end
+end
+
+
+% Image Preprocessing ------------------------------------------------------- %
+
+if ~(exist('preprocessed', 'var') && exist(preprocessed, 'file'))
+    fprintf(1, 'Extracting fingers ...\n');
+    raw = X;
+    X = zeros(h, w, size(raw, 3));
+    M = true(h, w, size(raw, 3));
+    keep = true(size(raw, 3), 1);
+    for i = 1:size(raw, 3)
+        [O, Ma] = fingerExtraction(raw(:,:,i), 150, ratio);
+        if numel(O) == 0
+            warning('rejected finger %d', i);
+            keep(i) = false;
+        else
+            X(:,:,i) = imresize(O, [h w]);
+            M(:,:,i) = imresize(Ma, [h w]);
+        end
+    end
+    rejected = X(:,:, ~keep);%#ok
+    X = X(:,:,keep);
+    M = M(:,:,keep);
+    S = S(keep);
+    I = I(keep);
+    fprintf(1, 'Saving ...\n');
+    save(preprocessed, 'M', 'X', 'I', 'S', 'rejected');
+else
+    load(preprocessed);
+end
+
+
+% Partitionning ------------------------------------------------------------- %
+
 fprintf(1, 'Assigning caterogries ...\n');
-C = zeros(numel(I), 1, 'int32');
-nPretrain = 0;
-nTrain    = 0;
-nVal      = 0;
-nTest     = 0;
+
+% move pretraining samples apart
+preOnly = false(numel(I), 1);
 for id = 1:312
     fromS1 = find(I == id & S == 1, 6);
     fromS2 = find(I == id & S == 2, 6);
     
-    if isempty(fromS1) || numel(fromS2)*(1+nExtra) < nMatching || id == 35
-            C([fromS1; fromS2]) = 0; % Pretraining
-            nPretrain = nPretrain + numel(fromS1) + numel(fromS2);
-    else
-        c = rand();
-        if c < trainRatio
-            C([fromS1; fromS2]) = 1; % Training
-            nTrain = nTrain + numel(fromS1) + numel(fromS2);
-        elseif c < trainRatio + valRatio
-            C([fromS1; fromS2]) = 2; % Validation
-        else
-            C([fromS1; fromS2]) = 3; % Testing
-        end
+    if isempty(fromS1) || numel(fromS2) < nMatching || id == 35
+        preOnly([fromS1; fromS2]) = 4;
+        nPretrain = nPretrain + numel(fromS1) + numel(fromS2);
     end
 end
 
-% Artificial samples
-fprintf(1, 'Generating artificial training images ...\n');
+dataset.pretrain_x = X(:,:, preOnly);
 
-T     = find(C == 1 | C == 0);
-Xtra  = zeros(h ,w, nExtra*numel(T));
-Ixtra = zeros(nExtra*numel(T), 1, 'uint32');
-Sxtra = zeros(nExtra*numel(T), 1, 'uint32');
-Cxtra = zeros(nExtra*numel(T), 1, 'uint32');
-for k = 1:numel(T)
+% Distribute ids into categories
+uniqId = unique(I(~preonly));
+uniqId = uniqId(randperm(numel(uniqId)));
+if isset('nFolds', 'var') % cross validation
+    nTrain   = round(numel(uniqId) * trainRatio);
+    
+    % move test samples aside
+    testIds  = uniqId(nTrain + 1:end);
+    uniqId   = uniqId(1:nTrain);
+    
+    trainIds = cell(nFolds, 1);
+    valIds   = cell(nFolds, 1);
+    batchSz  = round(nTrain / nFolds);
+    for i = 1:nFolds
+        val = false(numel(uniqIds));
+        val((i-1)*batchSz+1:min(i*batchSz, end)) = true;
+        trainIds{i} = uniqIds(val);
+        valIds{i}   = uniqIds(~val);
+    end
+else % simple validation
+    nTrain   = round(numel(uniqId) * trainRatio);
+    trainIds = uniqId(1:nTrain);
+    nVal     = round(numel(uniqId) * valRatio);
+    valIds   = uniqId(nTrain+1:nTrain+nVal);
+    testIds  = uniqId(nTrain+nVal+1:end);
+end
+
+
+% Extra artificial samples generation --------------------------------------- %
+
+fprintf(1, 'Generating artificial images ...\n');
+
+idx   = find(ismember(I, uniqId));
+Xtra  = zeros(h ,w, nExtra*numel(idx));
+Ixtra = zeros(nExtra*numel(idx), 1, 'uint32');
+Sxtra = zeros(nExtra*numel(idx), 1, 'uint32');
+for k = 1:numel(idx)
     for l = 1:nExtra
-        n = (k-1)*nExtra+l;
-        
+        n           = (k-1)*nExtra+l;
         shift       = round(randn(2, 1) * angleStd);
         a           = randn() * shiftStd;
-        tmp         = imrotate(imshift(X(:,:,T(k)), shift, 1), a, 'bilinear', 'crop');
-        tmpM        = imrotate(imshift(M(:,:,T(k)), shift, 1), a, 'bilinear', 'crop');
+        tmp         = imrotate(imshift(X(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
+        tmpM        = imrotate(imshift(M(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
         tmp(~tmpM)  = 1;
         Xtra(:,:,n) = tmp;
-        Ixtra(n)    = I(T(k));
-        Sxtra(n)    = S(T(k));
-        Cxtra(n)    = C(T(k));
+        Ixtra(n)    = I(idx(k));
+        Sxtra(n)    = S(idx(k))+2;
     end
 end
 
 X = cat(3, X, Xtra);
 I = [I; Ixtra];
 S = [S; Sxtra];
-C = [C; Cxtra];
-nPretrain = nPretrain * (nExtra+1);
-nTrain    = nTrain * (nExtra+1);
 
-% Sort samples by category
-[C, s] = sort(C);
-X = X(:,:,s);
-I = I(s);
-S = S(s);
 
-dataset.pretrain_x = X(:,:,1:nPretrain + nTrain);
-C = C(nPretrain+1:end);
-X = X(:, :, nPretrain+1:end);
-I = I(nPretrain+1:end);
-S = S(nPretrain+1:end);
+% Pairing ------------------------------------------------------------------- %
 
-% Make pairs
 fprintf(1, 'Building pairs ...\n');
+[dataset.test_x, dataset.test_y] = make_pairs(I, S, testIds);
 
-shuffle = zeros(sum(S==1)*(nMatching + nNonMatching), 2 ,'uint32');
-Y       = false(sum(S==1)*(nMatching + nNonMatching), 1);
-Cnew    = zeros(sum(S==1)*(nMatching + nNonMatching), 1, 'uint32');
-
-i = 1;
-for id = unique(I)'
-    fromS1 = find(I == id & S == 1, 6 * (1+nExtra));
-    fromS2 = find(I == id & S == 2, 6 * (1+nExtra));
-    c = C(fromS1(1));
-    nonpeers = find(I ~= id & C == c);
-    Cnew(i:i+nMatching+nNonMatching) = c;
-    
-    shuffle(i:i + numel(fromS1) * nMatching - 1, 1) = ...
-        reshape(repmat(fromS1', nMatching, 1), 1, []);
-    shuffle(i:i + numel(fromS1) * nMatching - 1, 2) = ...
-        fromS2(randi(numel(fromS2), 1, numel(fromS1)*nMatching));
-    Y(i:i + numel(fromS1) * nMatching) = true;
-    
-    i = i + numel(fromS1) * nMatching;
-    
-    shuffle(i:i + numel(fromS1) * nNonMatching - 1, 1) = ...
-        reshape(repmat(fromS1, nNonMatching, 1), 1, []);
-    shuffle(i:i + numel(fromS1) * nNonMatching - 1, 2) = ...
-        nonpeers(randi(numel(nonpeers), 1, numel(fromS1)*nNonMatching));
-    i = i + numel(fromS1) * nNonMatching;
+if isset('nFolds', 'var') % cross validation
+    S(S==3) = 1; S(S==4)=2; % merge normal and extra samples for training
+    dataset.train_x = cell(numel(trainIds), 1);
+    for i = 1:numel(trainIds)
+        [dataset.train_x{i}, dataset.train_y{i}] = ...
+            make_pairs(I, S, trainIds{i}, nMatching, nNonMatching);
+        [dataset.val_x{i}, dataset.val_y{i}] = ...
+            make_pairs(I, S, valIds{i}, nMatching, nNonMatching);
+    end
+else % simple validation
+    [dataset.val_x, dataset.val_y] = ...
+            make_pairs(I, S, valIds, nMatching, nNonMatching);
+    S(S==3) = 1; S(S==4)=2; % merge normal and extra samples for training
+    [dataset.train_x, dataset.train_y] = ...
+            make_pairs(I, S, trainIds, nMatching, nNonMatching);
 end
 
-% Build dataset
-fprintf(1, 'Packing up dataset ...\n');
-dataset.train_x    = { X(:,:,shuffle(C == 1, 1)), ...
-                       X(:,:,shuffle(C == 1, 2)) };
-dataset.train_y    = Y(C == 1);
-dataset.val_x    = { X(:,:,shuffle(C == 2, 1)), ...
-                     X(:,:,shuffle(C == 2, 2)) };
-dataset.val_y    = Y(C == 2);
-dataset.test_x    = { X(:,:,shuffle(C == 3, 1)), ...
-                      X(:,:,shuffle(C == 3, 2)) };
-dataset.test_y    = Y(C == 3);
+% Packing up ---------------------------------------------------------------- %
 
-fprintf(1, 'Saving dataset...\n');
-save(fullfile(curDir, 'dataset.mat'), 'dataset');
+fprintf(1, 'Packing up dataset ...\n');
+dataset.X = X;
+dataset.h = h;
+dataset.w = w;
 
 fprintf(1, 'Done.\n');
+end
