@@ -108,17 +108,16 @@ for id = 1:312
     fromS2 = find(I == id & S == 2, 6);
     
     if isempty(fromS1) || numel(fromS2) < nMatching || id == 35
-        preOnly([fromS1; fromS2]) = 4;
-        nPretrain = nPretrain + numel(fromS1) + numel(fromS2);
+        preOnly([fromS1; fromS2]) = true;
     end
 end
 
-dataset.pretrain_x = X(:,:, preOnly);
+dataset.pretrain_x = uint32(find(preOnly));
 
 % Distribute ids into categories
-uniqId = unique(I(~preonly));
+uniqId = unique(I(~preOnly));
 uniqId = uniqId(randperm(numel(uniqId)));
-if isset('nFolds', 'var') % cross validation
+if exist('nFolds', 'var') % cross validation
     nTrain   = round(numel(uniqId) * trainRatio);
     
     % move test samples aside
@@ -145,37 +144,38 @@ end
 
 % Extra artificial samples generation --------------------------------------- %
 
-fprintf(1, 'Generating artificial images ...\n');
+if exist('nExtra', 'var')
+    fprintf(1, 'Generating artificial images ...\n');
 
-idx   = find(ismember(I, uniqId));
-Xtra  = zeros(h ,w, nExtra*numel(idx));
-Ixtra = zeros(nExtra*numel(idx), 1, 'uint32');
-Sxtra = zeros(nExtra*numel(idx), 1, 'uint32');
-for k = 1:numel(idx)
-    for l = 1:nExtra
-        n           = (k-1)*nExtra+l;
-        shift       = round(randn(2, 1) * angleStd);
-        a           = randn() * shiftStd;
-        tmp         = imrotate(imshift(X(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
-        tmpM        = imrotate(imshift(M(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
-        tmp(~tmpM)  = 1;
-        Xtra(:,:,n) = tmp;
-        Ixtra(n)    = I(idx(k));
-        Sxtra(n)    = S(idx(k))+2;
+    idx   = find(ismember(I, uniqId));
+    Xtra  = zeros(h ,w, nExtra*numel(idx));
+    Ixtra = zeros(nExtra*numel(idx), 1, 'uint32');
+    Sxtra = zeros(nExtra*numel(idx), 1, 'uint32');
+    for k = 1:numel(idx)
+        for l = 1:nExtra
+            n           = (k-1)*nExtra+l;
+            shift       = round(randn(2, 1) * angleStd);
+            a           = randn() * shiftStd;
+            tmp         = imrotate(imshift(X(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
+            tmpM        = imrotate(imshift(M(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
+            tmp(~tmpM)  = 1;
+            Xtra(:,:,n) = tmp;
+            Ixtra(n)    = I(idx(k));
+            Sxtra(n)    = S(idx(k))+2;
+        end
     end
+
+    X = cat(3, X, Xtra);
+    I = [I; Ixtra];
+    S = [S; Sxtra];
 end
-
-X = cat(3, X, Xtra);
-I = [I; Ixtra];
-S = [S; Sxtra];
-
 
 % Pairing ------------------------------------------------------------------- %
 
 fprintf(1, 'Building pairs ...\n');
-[dataset.test_x, dataset.test_y] = make_pairs(I, S, testIds);
+[dataset.test_x, dataset.test_y] = make_pairs(I, S, testIds, nMatching, nNonMatching);
 
-if isset('nFolds', 'var') % cross validation
+if exist('nFolds', 'var') % cross validation
     S(S==3) = 1; S(S==4)=2; % merge normal and extra samples for training
     dataset.train_x = cell(numel(trainIds), 1);
     for i = 1:numel(trainIds)
