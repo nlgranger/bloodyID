@@ -12,6 +12,7 @@ if exist('data/hk_original/dataset.mat', 'file')
     load('data/hk_original/dataset.mat');
 else
     dataset = make_dataset('data/hk_original', [35 81], [0.7 0], [4 6], ...
+        'nExtra', 1, ...
         'preprocessed', 'data/hk_original/preprocessed.mat');
     dataset.X = -single(dataset.X);
     save('data/hk_original/dataset.mat', 'dataset');
@@ -21,19 +22,19 @@ end
 
 extractionNet = MultiLayerNet(struct());
 
-trainOpts = struct('lRate', 1e-5, 'dropout', .2);
-cnn = CNN([h w], [8 10], 20, trainOpts, 'pool', [4 4]);
+trainOpts = struct('lRate', 2e-6);
+cnn = CNN([h w], [8 10], 24, trainOpts, 'pool', [4 4], 'dropout', 0.2);
 extractionNet.add(cnn);
 
-trainOpts = struct('lRate', 5e-6, 'dropout', .1);
+trainOpts = struct('lRate', 2e-6);
 outSz = extractionNet.outsize();
-cnn   = CNN(outSz, [2 3], 5, trainOpts, 'pool', [2 2]);
+cnn   = CNN(outSz, [2 3], 5, trainOpts, 'pool', [2 2], 'dropout', 0.1);
 extractionNet.add(cnn);
 
 concat = ReshapeNet(extractionNet, prod(extractionNet.outsize()));
 extractionNet.add(concat);
 
-rbm = RELURBM(extractionNet.outsize(), 120, struct(), trainOpts);
+rbm = RELURBM(extractionNet.outsize(), 60, struct(), trainOpts);
 extractionNet.add(rbm);
 
 %% Comparison layers

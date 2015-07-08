@@ -88,7 +88,7 @@ end
 O  = double(R);
 bg = ones(size(O)) * mean(O(M));
 bg(M) = O(M);
-bg = filter2(fspecial('gaussian', [20 20], 15), bg);
+bg = filter2(fspecial('gaussian', [20 20], 13), bg);
 O  = tanh((O - bg)/20);
 
 % Cut ROI and resize
