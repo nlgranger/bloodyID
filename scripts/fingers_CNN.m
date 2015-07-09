@@ -12,8 +12,7 @@ nFolds       = 7;
 if exist('data/hk_original/dataset.mat', 'file')
     load('data/hk_original/dataset.mat');
 else
-    dataset = make_dataset('data/hk_original', [35 81], [0.7 0], [4 6], ...
-        'nExtra', 2, ...
+    dataset = make_dataset('data/hk_original', [35 81], [1 0], [4 6], ...
         'preprocessed', 'data/hk_original/preprocessed.mat', ...
         'nFolds', nFolds);
     dataset.X = -single(dataset.X);
@@ -25,7 +24,7 @@ end
 extractionNet = MultiLayerNet(struct());
 
 trainOpts = struct('lRate', 2e-6);
-cnn = CNN([h w], [8 10], 24, trainOpts, 'pool', [4 4], 'dropout', 0.4);
+cnn = CNN([h w], [8 10], 24, trainOpts, 'pool', [4 4], 'dropout', 0.3);
 extractionNet.add(cnn);
 
 trainOpts = struct('lRate', 2e-6);
@@ -42,7 +41,8 @@ extractionNet.add(rbm);
 %% Comparison layers
 
 trainOpts  = struct('nIter', 60, ...
-                    'batchSz', 300);
+                    'batchSz', 300, ...
+                    'displayEvery', 5);
 wholeNet   = MultiLayerNet(trainOpts);
 compareNet = SiameseNet(extractionNet, 2, 'skipPretrain');
 wholeNet.add(compareNet);
@@ -52,13 +52,11 @@ wholeNet.add(l2);
 
 %% Training
 
-res = zeros(4, nFolds);
+res = zeros(nFolds, 4);
 
-parfor i = 1:nFolds
+for i = 1:1%nFolds
     X = {dataset.X(:,:,dataset.train_x{i}(:,1)), dataset.X(:,:,dataset.train_x{i}(:,2))};
     Y = 3*(~dataset.train_y{i})';
-    Xt = {dataset.X(:,:,dataset.test_x(:,1)), dataset.X(:,:,dataset.test_x(:,2))};
-    Yt = 3*(~dataset.test_y)';
     
     net = wholeNet.copy();
     net.train(X, Y);
@@ -70,19 +68,24 @@ parfor i = 1:nFolds
     r(1) = mean(m(dataset.train_y{i}));
     r(2) = mean(m(~dataset.train_y{i}));
 
-    o = net.compute(Xt)';
-    m = (o > eer) == dataset.test_y;
-    r(3) = mean(m(dataset.test_y));
-    r(4) = mean(m(~dataset.test_y));
+    X = {dataset.X(:,:,dataset.val_x{i}(:,1)), dataset.X(:,:,dataset.val_x{i}(:,2))};
+    Y = 3*(~dataset.val_y{i})';
+    
+    o = net.compute(X)';
+    m = (o > eer) == dataset.val_y{i};
+    r(3) = mean(m(dataset.val_y{i}));
+    r(4) = mean(m(~dataset.val_y{i}));
     res(i,:) = r;
+    disp(i);
+    disp(r);
 end
 
-disp(scores);
+disp(res);
 
-colormap gray
-W = wholeNet.nets{1}.net.nets{1}.filters;
-for i = 1:size(W, 4)
-    imagesc(W(:,:,1,i));
-    axis image;
-    pause
-end
+% colormap gray
+% W = wholeNet.nets{1}.net.nets{1}.filters;
+% for i = 1:size(W, 4)
+%     imagesc(W(:,:,1,i));
+%     axis image;
+%     pause
+% end
