@@ -52,7 +52,7 @@ wholeNet.add(l2);
 
 %% Training
 
-scores = zeros(4, nFolds);
+res = zeros(4, nFolds);
 
 parfor i = 1:nFolds
     X = {dataset.X(:,:,dataset.train_x{i}(:,1)), dataset.X(:,:,dataset.train_x{i}(:,2))};
@@ -63,16 +63,18 @@ parfor i = 1:nFolds
     net = wholeNet.copy();
     net.train(X, Y);
 
+    r = zeros(1,4);
     o = net.compute(X)';
     eer = fminsearch(@(t) abs(mean(o(dataset.train_y{i})<t) - mean(o(~dataset.train_y{i})>t)), 1.5);
     m = (o > eer) == dataset.train_y{i};
-    scores(1, i) = mean(m(dataset.train_y{i}));
-    scores(2, i) = mean(m(~dataset.train_y{i}));
+    r(1) = mean(m(dataset.train_y{i}));
+    r(2) = mean(m(~dataset.train_y{i}));
 
     o = net.compute(Xt)';
     m = (o > eer) == dataset.test_y;
-    scores(3, i) = mean(m(dataset.test_y));
-    scores(4, i) = mean(m(~dataset.test_y));
+    r(3) = mean(m(dataset.test_y));
+    r(4) = mean(m(~dataset.test_y));
+    res(i,:) = r;
 end
 
 disp(scores);
