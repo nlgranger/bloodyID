@@ -5,7 +5,7 @@ ratio        = 2.3;
 w            = round(ratio*h);
 nMatching    = 4; % number of matching pairs for each image
 nNonMatching = 6; % number of non matching pairs for each image
-nFolds       = 10;
+nFolds       = 7;
 
 %% load initial data
 % CNN requires single precision input!
@@ -25,7 +25,7 @@ end
 extractionNet = MultiLayerNet(struct());
 
 trainOpts = struct('lRate', 2e-6);
-cnn = CNN([h w], [8 10], 24, trainOpts, 'pool', [4 4], 'dropout', 0.3);
+cnn = CNN([h w], [8 10], 24, trainOpts, 'pool', [4 4], 'dropout', 0.4);
 extractionNet.add(cnn);
 
 trainOpts = struct('lRate', 2e-6);
@@ -42,8 +42,7 @@ extractionNet.add(rbm);
 %% Comparison layers
 
 trainOpts  = struct('nIter', 60, ...
-                    'batchSz', 300, ...
-                    'displayEvery', 5);
+                    'batchSz', 300);
 wholeNet   = MultiLayerNet(trainOpts);
 compareNet = SiameseNet(extractionNet, 2, 'skipPretrain');
 wholeNet.add(compareNet);
@@ -52,6 +51,8 @@ l2 = L2Compare(120);
 wholeNet.add(l2);
 
 %% Training
+
+scores = zeros(4, nFolds);
 
 parfor i = 1:nFolds
     X = {dataset.X(:,:,dataset.train_x{i}(:,1)), dataset.X(:,:,dataset.train_x{i}(:,2))};
@@ -65,14 +66,16 @@ parfor i = 1:nFolds
     o = net.compute(X)';
     eer = fminsearch(@(t) abs(mean(o(dataset.train_y{i})<t) - mean(o(~dataset.train_y{i})>t)), 1.5);
     m = (o > eer) == dataset.train_y{i};
-    mean(m(dataset.train_y{i}))
-    mean(m(~dataset.train_y{i}))
+    scores(1, i) = mean(m(dataset.train_y{i}));
+    scores(2, i) = mean(m(~dataset.train_y{i}));
 
     o = net.compute(Xt)';
     m = (o > eer) == dataset.test_y;
-    mean(m(dataset.test_y))
-    mean(m(~dataset.test_y))
+    scores(3, i) = mean(m(dataset.test_y));
+    scores(4, i) = mean(m(~dataset.test_y));
 end
+
+disp(scores);
 
 colormap gray
 W = wholeNet.nets{1}.net.nets{1}.filters;
