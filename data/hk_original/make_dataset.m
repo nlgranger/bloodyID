@@ -130,8 +130,8 @@ if exist('nFolds', 'var') % cross validation
     for i = 1:nFolds
         val = false(numel(uniqId), 1);
         val((i-1)*batchSz+1:min(i*batchSz, end)) = true;
-        trainIds{i} = uniqId(val);
-        valIds{i}   = uniqId(~val);
+        trainIds{i} = uniqId(~val);
+        valIds{i}   = uniqId(val);
     end
 else % simple validation
     nTrain   = round(numel(uniqId) * trainRatio);
