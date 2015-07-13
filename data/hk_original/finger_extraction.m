@@ -1,4 +1,4 @@
-function [O, M] = fingerExtraction(I, h, ratio)
+function [O, M] = finger_extraction(I, h, ratio)
 %fingerExtraction extract a ROI in the finger
 %   [O, M] = fingerExtraction(I, h, ratio) returns the region of interest
 %   around the third phalangeal distal joint. The ROI takes the average
@@ -96,7 +96,7 @@ O = O(y:y+h, x:x+w);
 M = M(y:y+h, x:x+w);
 
 % Spread histogram
-M2    = bwmorph(M, 'erode', 6);
+M2    = bwmorph(M, 'erode', 10);
 m     = mean(O(M2));
 s     = std(O(M2));
 O     = tanh((O-m)/(2*s));

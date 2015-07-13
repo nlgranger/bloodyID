@@ -25,7 +25,7 @@ function dataset = make_dataset(dbPath, sz, partition, pairing, varargin)
 % I is an N long vector of individual ids mapped to the dataset ones for
 % finger 1 and offset by 156 for finger 2.
 % S contain the session number, 1 or 2 for the original images or 3 and 4
-% for extra images generated from session 1 and 2 respectively.
+% for extra artificial images generated from sessions 1 and 2 respectively.
 
 
 % Parameters ---------------------------------------------------------------- %
@@ -76,7 +76,7 @@ if ~(exist('preprocessed', 'var') && exist(preprocessed, 'file'))
     M = true(h, w, size(raw, 3));
     keep = true(size(raw, 3), 1);
     for i = 1:size(raw, 3)
-        [O, Ma] = fingerExtraction(raw(:,:,i), 150, ratio);
+        [O, Ma] = finger_extraction(raw(:,:,i), 150, ratio);
         if numel(O) == 0
             warning('rejected finger %d', i);
             keep(i) = false;
@@ -149,23 +149,26 @@ if exist('nExtra', 'var')
 
     idx   = find(ismember(I, uniqId));
     Xtra  = zeros(h ,w, nExtra*numel(idx));
+    Mxtra = false(h ,w, nExtra*numel(idx));
     Ixtra = zeros(nExtra*numel(idx), 1, 'uint32');
     Sxtra = zeros(nExtra*numel(idx), 1, 'uint32');
     for k = 1:numel(idx)
         for l = 1:nExtra
-            n           = (k-1)*nExtra+l;
-            shift       = round(randn(2, 1) * angleStd);
-            a           = randn() * shiftStd;
-            tmp         = imrotate(imshift(X(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
-            tmpM        = imrotate(imshift(M(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
-            tmp(~tmpM)  = 1;
-            Xtra(:,:,n) = tmp;
-            Ixtra(n)    = I(idx(k));
-            Sxtra(n)    = S(idx(k))+2;
+            n            = (k-1)*nExtra+l;
+            shift        = round(randn(2, 1) * angleStd);
+            a            = randn() * shiftStd;
+            tmp          = imrotate(imshift(X(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
+            tmpM         = imrotate(imshift(M(:,:,idx(k)), shift, 1), a, 'bilinear', 'crop');
+            tmp(~tmpM)   = 1;
+            Xtra(:,:,n)  = tmp;
+            Mxtra(:,:,n) = tmpM;
+            Ixtra(n)     = I(idx(k));
+            Sxtra(n)     = S(idx(k))+2;
         end
     end
 
     X = cat(3, X, Xtra);
+    M = cat(3, M, Mxtra);
     I = [I; Ixtra];
     S = [S; Sxtra];
 end
@@ -196,6 +199,7 @@ end
 
 fprintf(1, 'Packing up dataset ...\n');
 dataset.X = X;
+dataset.M = M;
 dataset.h = h;
 dataset.w = w;
 
