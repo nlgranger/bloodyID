@@ -75,7 +75,7 @@ if ~(exist('preprocessed', 'var') && exist(preprocessed, 'file'))
     X = zeros(h, w, size(raw, 3));
     M = true(h, w, size(raw, 3));
     keep = true(size(raw, 3), 1);
-    for i = 1:size(raw, 3)
+    parfor i = 1:size(raw, 3)
         [O, Ma] = finger_extraction(raw(:,:,i), 150, ratio);
         if numel(O) == 0
             warning('rejected finger %d', i);
