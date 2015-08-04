@@ -1,42 +1,45 @@
+%% Parameters
 
-
-h     = 35;
-ratio = 2.3;
-w     = round(ratio*h);
+h            = 35;
+ratio        = 2.3;
+w            = round(ratio*h);
 nMatching    = 4; % number of matching pairs for each image
 nNonMatching = 6; % number of non matching pairs for each image
 patchSz      = [19 19];
 overlap      = [11 11];
+nFolds       = 7;
 
 %% load initial data
 
-load('data/hk_original/dataset.mat');
-dataset.pretrain_x = 1 - 0.5 * (dataset.pretrain_x + 1);
-dataset.train_x{1} = 1 - 0.5 * (dataset.train_x{1} + 1);
-dataset.train_x{2} = 1 - 0.5 * (dataset.train_x{2} + 1);
-dataset.test_x{1}  = 1 - 0.5 * (dataset.test_x{1} + 1);
-dataset.test_x{2}  = 1 - 0.5 * (dataset.test_x{2} + 1);
+if exist('data/hk_original/dataset_small.mat', 'file')
+    load('data/hk_original/dataset_small.mat');
+else
+    dataset = make_dataset('data/hk_original', ...
+        [h w], [0.5 0], [nMatching nNonMatching], ...
+        'preprocessed', 'data/hk_original/preprocessed_small.mat', ...
+        'nFolds', nFolds);
+    dataset.X = 1 - 0.5 * (dataset.X + 1);
+    save('data/hk_original/dataset_small.mat', 'dataset');
+end
 
 %% Extraction layers
 
-extractionNet = MultiLayerNet(struct('skipBelow', 1));
+extractionNet = MultiLayerNet();
 
 patchMaker = PatchNet([h, w], patchSz, overlap);
 extractionNet.add(patchMaker);
+extractionNet.freezeBelow(1);
 
-RBMtrainOpts = struct('lRate', 1e-3);
+RBMtrainOpts = struct( ...
+    'lRate', 2e-4, ...
+    'dropout', 0.2);
 RBMpretrainingOpts = struct( ...
-    'lRate', 4e-3, ...
+    'lRate', 2e-5, ...
     'momentum', 0.5, ...
-    'nEpochs', 65, ...
+    'nEpochs', 120, ...
     'batchSz', 400, ...
-    'dropVis', 0.3, ...
-    'dropHid', 0.1, ...
-    'wPenalty', 0.001, ...
-    'selectivity', 5, ...
-    'selectAfter', 15, ...
-    'displayEvery', 5);
-rbm = RELURBM(prod(patchSz), 120, RBMpretrainingOpts, RBMtrainOpts, false);
+    'displayEvery', 10);
+rbm = RELURBM(prod(patchSz), 150, RBMpretrainingOpts, RBMtrainOpts, false);
 
 imRedux = SiameseNet(rbm, numel(patchMaker.outsize()));
 extractionNet.add(imRedux);
@@ -44,100 +47,64 @@ extractionNet.add(imRedux);
 patchMerge = ReshapeNet(imRedux, sum(cellfun(@prod, imRedux.outsize())));
 extractionNet.add(patchMerge);
 
-RBMtrainOpts = struct('lRate', 5e-4);
+RBMtrainOpts = struct( ...
+    'lRate', 2e-4);
 RBMpretrainingOpts = struct( ...
-    'lRate', 5e-3, ...
+    'lRate', 2e-5, ...
     'momentum', 0.5, ...
-    'nEpochs', 100, ...
+    'nEpochs', 30, ...
     'batchSz', 400, ...
     'displayEvery', 5);
-rbm = RELURBM(120 * numel(patchMaker.outsize()), 120, RBMpretrainingOpts, RBMtrainOpts, false);
+rbm = RELURBM(150 * numel(patchMaker.outsize()), 150, RBMpretrainingOpts, RBMtrainOpts, true);
 extractionNet.add(rbm);
-
-extractionNet.pretrain(dataset.pretrain_x);
-
-rbm = RELURBM(120, 80, RBMpretrainingOpts, RBMtrainOpts, true);
-extractionNet.add(rbm);
-
-save('data/workspaces/pretrained.mat', 'extractionNet');
-% o = extractionNet.nets{1}.compute(dataset.pretrain_x);
-% p = extractionNet.nets{2}.compute(o);
-% q = extractionNet.nets{3}.compute(p);
-% W = extractionNet.nets{2}.net.W;
-% colormap gray
-% for i = 1:70
-%     subplot(2,1,1)
-%     imagesc(reshape(W(:,i), patchSz))
-%     colorbar
-%     axis image
-%     subplot(2,1,2)
-%     hist(reshape(q(i:70:end,:), 1, []));
-%     pause
-% end
-% 
-r = extractionNet.compute(dataset.pretrain_x);
-for i = 1:80
-    subplot(1,1,1)
-    hist(reshape(r(i:70:end,:), 1, []));
-    pause
-end
-
-
-%% Comparison layers
-
-trainOpts = struct('nIter', 50, ...
-                   'batchSz', 300, ...
-                   'displayEvery', 5);
-
-wholeNet  = MultiLayerNet(trainOpts);
-
-% Duplicate extraction network
-compareNet = SiameseNet(extractionNet, 2, 'skipPretrain');
-wholeNet.add(compareNet);
-
-cosine = L2Compare(50);
-wholeNet.add(cosine);
 
 %% Training
 
-% o = wholeNet.compute(dataset.test_x);
-% m = o > 0.47 ~= dataset.test_y';
-% mean(m(dataset.test_y))
-% mean(m(~dataset.test_y))
-% o = wholeNet.compute(dataset.train_x);
-% m = o > .47 ~= dataset.train_y';
-% mean(m(dataset.train_y))
-% mean(m(~dataset.train_y))
+trainOpts = struct('nIter', 100, ...
+                   'batchSz', 400, ...
+                   'batchFn', @pairsBatchFn, ...
+                   'displayEvery', 3);
 
-wholeNet.train(dataset.train_x, 20*(~dataset.train_y)');
+for i = 1:1%nFolds
+    extraction = extractionNet.copy();
+%     extraction.pretrain(dataset.X(:,:, ...
+%         unique([dataset.pretrain_x; ...
+%                 dataset.train_x{i}(:,1); ...
+%                 dataset.train_x{i}(:,2)])));
+    rbm = RELURBM(150, 100, RBMpretrainingOpts, RBMtrainOpts, true);
+    extraction.add(rbm);
 
-o = wholeNet.compute(dataset.test_x);
-m = o < 10 ~= dataset.test_y';
-mean(m(dataset.test_y))
-mean(m(~dataset.test_y))
-o = wholeNet.compute(dataset.train_x);
-m = o < 10 ~= dataset.train_y';
-mean(m(dataset.train_y))
-mean(m(~dataset.train_y))
+    compareNet = SiameseNet(extraction, 2, 'skipPretrain');
+    wholeNet   = MultiLayerNet();
+    metric     = CosineCompare(100);
+    wholeNet.add(compareNet);
+    wholeNet.add(metric);
+    
+    X = struct('data', dataset.X, 'pairs', dataset.train_x{i});
+    Y = 2*(~dataset.train_y{i})';
+    net = wholeNet.copy(); % start from random weights
+    train(net, @L2Cost, X, Y, trainOpts);
+    r = zeros(1, 4);
+    
+    % Compute mis-classification on training data
+    [allX, allY] = trainOpts.batchFn(X, Y, inf, []);
+    o = net.compute(allX);
+    eer = fminsearch(@(t) abs(mean(o(allY == 0)<t) - mean(o(allY > 0)>=t)), 1);
+    m = (o > eer) ~= (allY > 0);
+    r(1) = mean(m(allY > 0));
+    r(2) = mean(m(allY == 0));
+
+    % Compute mis-classification on testing data
+    X = struct('data', dataset.X, 'pairs', dataset.val_x{i});
+    Y = single((~dataset.val_y{i}))';
+    [allX, allY] = trainOpts.batchFn(X, Y, inf, []);
+    o = net.compute(allX);
+    m = (o > eer) ~= (allY > 0);
+    r(3) = mean(m(allY > 0));
+    r(4) = mean(m(allY == 0));
+    disp(i);
+    disp(r);
+end
 
 %% Testing
 
-% figure
-% colormap gray
-% f = find(m);
-% for i = f
-%     fprintf(1, 'y = %d ; y = %f\n', ...
-%         ~dataset.test_y(i), ...
-%         wholeNet.compute({dataset.test_x{1}(:,:,i), dataset.test_x{2}(:,:,i)}));
-%     subplot(2,2,1)
-%     imagesc(dataset.test_x{1}(:,:,i))
-%     axis image
-%     subplot(2,2,2)
-%     hist(wholeNet.nets{1}.net.compute(dataset.test_x{1}(:,:,i)))
-%     subplot(2,2,3)
-%     imagesc(dataset.test_x{2}(:,:,i))
-%     axis image
-%     subplot(2,2,4)
-%     hist(wholeNet.nets{1}.net.compute(dataset.test_x{2}(:,:,i)))
-%     pause
-% end

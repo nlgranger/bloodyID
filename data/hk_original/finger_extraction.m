@@ -96,9 +96,9 @@ O = O(y:y+h, x:x+w);
 M = M(y:y+h, x:x+w);
 
 % Spread histogram
-M2    = bwmorph(M, 'erode', 10);
-m     = mean(O(M2));
-s     = std(O(M2));
-O     = tanh((O-m)/(2*s));
+M2     = bwmorph(M, 'erode', 10);
+m      = mean(O(M2));
+s      = std(O(M2));
+O      = tanh((O-m)/(2*s));
 O(~M2) = 1;
 end
