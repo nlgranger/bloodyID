@@ -12,7 +12,7 @@ nFolds       = 7;
 if exist('data/hk_original/dataset_small.mat', 'file')
     load('data/hk_original/dataset_small.mat');
 else
-    dataset = make_dataset('data/hk_original', [h w], [0.5 0], [4 6], ...
+    dataset = make_dataset('data/hk_original', [h w], [0.1 0], [4 6], ...
         'preprocessed', 'data/hk_original/preprocessed_small.mat', ...
         'nFolds', nFolds);
     dataset.X = -single(padarray(dataset.X, [6 7 0], 1));
@@ -28,7 +28,7 @@ end
 
 extractionNet = MultiLayerNet();
 
-trainOpts = struct('lRate', 1e-5, 'dropout', 0.1);
+trainOpts = struct('lRate', 5e-6, 'dropout', 0.5);
 cnn = CNN([47 95], [12 16], 10, trainOpts, 'pool', [4 4]);
 
 % L = [3.5, 4.2];
@@ -41,14 +41,14 @@ cnn = CNN([47 95], [12 16], 10, trainOpts, 'pool', [4 4]);
 % end
 extractionNet.add(cnn);
 
-trainOpts = struct('lRate', 1e-5);
-cnn       = CNN(extractionNet.outsize(), [2 7], 10, trainOpts, 'pool', [2 2]);
+trainOpts = struct('lRate', 5e-6, 'dropout', 0.1);
+cnn       = CNN(extractionNet.outsize(), [2 7], 10, trainOpts);
 extractionNet.add(cnn);
 
 concat = ReshapeNet(extractionNet, prod(extractionNet.outsize()));
 extractionNet.add(concat);
 
-trainOpts = struct('lRate', 1e-6);
+trainOpts = struct('lRate', 5e-6);
 rbm = RELURBM(extractionNet.outsize(), 70, struct(), trainOpts);
 extractionNet.add(rbm);
 
@@ -63,38 +63,39 @@ wholeNet.add(metric);
 
 %% Training
 
-trainOpts = struct('nIter', 10, ...
+trainOpts = struct('batchFn', @pairsBatchFn, ...
+                   'nIter', 10, ...
                    'batchSz', 500, ...
-                   'displayEvery', 1);
+                   'displayEvery', 3);
 
 res = zeros(nFolds, 4, 8);
 for i = 1:nFolds
-    X = {dataset.X(:,:,dataset.train_x{i}(:,1)), dataset.X(:,:,dataset.train_x{i}(:,2))};
-    Y = single((~dataset.train_y{i}))';
-    
     net = wholeNet.copy(); % start from random weights
+    X = struct('data', dataset.X, 'pairs', dataset.train_x{i});
+    Y = single(~dataset.train_y{i})';
+    Xv = struct('data', dataset.X, 'pairs', dataset.val_x{i});
+    Yv = single(~dataset.val_y{i})';
     
     for j = 1:8
         % Train for a few iterations
-        net = train(net, @testCost, X, Y, trainOpts);
+        train(net, @L2Cost, X, Y, trainOpts);
 
-        % Compute mis-classification on training data
         r = zeros(1, 4);
-        o = net.compute(X)';
-        eer = fminsearch(@(t) abs(mean(o(dataset.train_y{i})<t) - mean(o(~dataset.train_y{i})>t)), 0.25);
-        m = (o > eer) == dataset.train_y{i};
-        r(1) = mean(m(dataset.train_y{i}));
-        r(2) = mean(m(~dataset.train_y{i}));
+        % Training performances
+        [allX, allY] = trainOpts.batchFn(X, Y, inf, []);
+        o = wholeNet.compute(allX);
+        eer = fminsearch(@(t) abs(mean(o(allY == 0)<t) - mean(o(allY > 0)>=t)), 1);
+        m = (o > eer) ~= (allY > 0);
+        r(1) = mean(m(allY > 0));
+        r(2) = mean(m(allY == 0));
 
-        % Compute mis-classification on testing data
-        Xv = {dataset.X(:,:,dataset.val_x{i}(:,1)), dataset.X(:,:,dataset.val_x{i}(:,2))};
-        o = net.compute(Xv)';
-        clear Xv;
-        m = (o > eer) == dataset.val_y{i};
-        r(3) = mean(m(dataset.val_y{i}));
-        r(4) = mean(m(~dataset.val_y{i}));
-        res(i,:,j) = r;
-        disp(i);
+        % Validation performances
+        [allX, allY] = trainOpts.batchFn(Xv, Yv, inf, []);
+        o = wholeNet.compute(allX);
+        m = (o > eer) ~= (allY > 0);
+        r(3) = mean(m(allY > 0));
+        r(4) = mean(m(allY == 0));
+        
         disp(r);
         
         % Save network state
