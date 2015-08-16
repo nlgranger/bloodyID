@@ -12,7 +12,7 @@ nFolds       = 7;
 if exist('data/hk_original/dataset_small.mat', 'file')
     load('data/hk_original/dataset_small.mat');
 else
-    dataset = make_dataset('data/hk_original', [h w], [0.2 0], [4 6], ...
+    dataset = make_dataset('data/hk_original', [h w], [0.7 0], [4 5], ...
         'preprocessed', 'data/hk_original/preprocessed_small.mat', ...
         'nFolds', nFolds);
     dataset.X = single(padarray(-dataset.X, [6 7 0], -1));
@@ -28,8 +28,8 @@ end
 
 extractionNet = MultiLayerNet();
 
-trainOpts = struct('lRate', 6e-5, 'dropout', 0.3);
-cnn = CNN([47 95], [12 16], 12, trainOpts, 'pool', [4 4]);
+trainOpts = struct('lRate', 4e-5);
+cnn = CNN([47 95], [12 16], 14, trainOpts, 'pool', [4 4]);
 % L = [3.5, 4.2];
 % for j = 1:numel(L)
 %     l = L(j);
@@ -47,11 +47,11 @@ extractionNet.add(cnn);
 concat = ReshapeNet(extractionNet, prod(extractionNet.outsize()));
 extractionNet.add(concat);
 
-trainOpts = struct('lRate', 3e-5);
+trainOpts = struct('lRate', 4e-5, 'dropout', 0.5);
 rbm = RELURBM(extractionNet.outsize(), 1000, struct(), trainOpts);
 extractionNet.add(rbm);
 
-trainOpts = struct('lRate', 3e-5);
+trainOpts = struct('lRate', 4e-5, 'dropout', 0.3);
 rbm = RELURBM(extractionNet.outsize(), 500, struct(), trainOpts);
 extractionNet.add(rbm);
 
@@ -67,12 +67,12 @@ wholeNet.add(metric);
 %% Training
 
 trainOpts = struct('batchFn', @pairsBatchFn, ...
-                   'nIter', 10, ...
+                   'nIter', 20, ...
                    'batchSz', 500, ...
-                   'displayEvery', 1);
+                   'displayEvery', 10);
 
-res = zeros(nFolds, 4, 8);
-for i = 1:nFolds
+res = zeros(nFolds, 8, 4);
+for i = 2:nFolds
     net = wholeNet.copy(); % start from random weights
     X  = struct('data', dataset.X, 'pairs', dataset.train_x{i});
     Y  = ~dataset.train_y{i}';
@@ -87,7 +87,8 @@ for i = 1:nFolds
         % Training performances
         [allX, allY] = trainOpts.batchFn(X, Y, inf, []);
         o = net.compute(allX);
-        eer = fminsearch(@(t) abs(mean(o(allY == 0)<t) - mean(o(allY > 0)>=t)), double(mean(o)));
+        eer = fminsearch(@(t) abs(mean(o(allY == 0) < t) ...
+            - mean(o(allY > 0) >= t)), double(mean(o)));
         m = (o > eer) ~= (allY > 0);
         r(1) = mean(m(allY > 0));
         r(2) = mean(m(allY == 0));
@@ -99,11 +100,12 @@ for i = 1:nFolds
         r(3) = mean(m(allY > 0));
         r(4) = mean(m(allY == 0));
         
-        disp(r);
-        
-        % Save network state
-        save('data/workspaces/trained.mat', 'net');
+        res(i, j, :) = r;
+        disp(r);        
     end
+    
+    % Save network state
+    save('data/workspaces/trained.mat', 'net');
 end
 
 disp(res);

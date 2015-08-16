@@ -20,9 +20,8 @@ for i = 1:80
 end    
 
 subplot(1,1,1)
-y = wholeNet.nets{1}.compute(allX);
+y = wholeNet.compute(allX);
 
-for i = 1:80
-    hist([y{1}(i,:) y{2}(i,:)], 30);
-    pause;
-end    
+histogram(y(allY > 0), 'binWidth', 0.05);
+hold on
+histogram(y(allY == 0), 'binWidth', 0.05);
