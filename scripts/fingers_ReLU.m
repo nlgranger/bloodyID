@@ -4,7 +4,7 @@ h            = 35;
 ratio        = 2.3;
 w            = round(ratio*h);
 nMatching    = 4; % number of matching pairs for each image
-nNonMatching = 6; % number of non matching pairs for each image
+nNonMatching = 4; % number of non matching pairs for each image
 patchSz      = [19 19];
 overlap      = [11 11];
 nFolds       = 10;
@@ -35,27 +35,27 @@ RBM1pretrainingOpts = struct( ...
     'selectAfter', 25, ...
     'displayEvery', 10);
 RBM1trainOpts = struct( ...
-    'dropout', 0.4, ...
-    'lRate', 5e-5);
+    'dropout', 0.3, ...
+    'lRate', 2e-5);
 
 % fusion RBM
 RBM2pretrainingOpts = struct();
 RBM2trainOpts = struct( ...
-    'dropout', 0.5, ...
-    'lRate', 5e-5);
+    'dropout', 0.3, ...
+    'lRate', 2e-5);
 
 RBM3pretrainingOpts = struct();
 RBM3trainOpts = struct( ...
     'dropout', 0.1, ...
-    'lRate', 5e-5);
+    'lRate', 2e-5);
 
 %% Training
 
 trainOpts = struct(...
-    'nIter', 80, ...
+    'nIter', 50, ...
     'batchSz', 400, ...
     'batchFn', @pairsBatchFn, ...
-    'displayEvery', 10);
+    'displayEvery', 3);
 
 for i = 1:1%nFolds % Cross-validation loop
 %     extractionNet = MultiLayerNet();
@@ -97,13 +97,13 @@ for i = 1:1%nFolds % Cross-validation loop
     % Combined network
     compareNet = SiameseNet(extractionNet, 2);
     wholeNet   = MultiLayerNet();
-    metric     = L2Compare(extractionNet.outsize());
+    metric     = JaccardDistance(extractionNet.outsize());
     wholeNet.add(compareNet);
     wholeNet.add(metric);
     
     % Training
     X = struct('data', dataset.X, 'pairs', dataset.train_x{i});
-    Y = (~dataset.train_y{i})';
+    Y = ~dataset.train_y{i}';
     train(wholeNet, @expCost, X, Y, trainOpts);
     r = zeros(1, 4);
     
@@ -111,18 +111,17 @@ for i = 1:1%nFolds % Cross-validation loop
     [allX, allY] = trainOpts.batchFn(X, Y, inf, []);
     o = wholeNet.compute(allX);
     eer = fminsearch(@(t) abs(mean(o(allY == 0)<t) - mean(o(allY > 0)>=t)), double(mean(o)));
-    m = (o > eer) ~= (allY > 0);
-    r(1) = mean(m(allY > 0));
-    r(2) = mean(m(allY == 0));
+    r(1) = mean(o(allY == 0) > eer);
+    r(2) = mean(o(allY > 0) < eer);
 
     % Validation performances
-    X = struct('data', dataset.X, 'pairs', dataset.val_x{i});
-    Y = single(~dataset.val_y{i})';
-    [allX, allY] = trainOpts.batchFn(X, Y, inf, []);
+    Xv = struct('data', dataset.X, 'pairs', dataset.val_x{i});
+    Yv = single(~dataset.val_y{i})';
+    [allX, allY] = trainOpts.batchFn(Xv, Yv, inf, []);
     o = wholeNet.compute(allX);
     m = (o > eer) ~= (allY > 0);
-    r(3) = mean(m(allY > 0));
-    r(4) = mean(m(allY == 0));
+    r(3) = mean(o(allY == 0) > eer);
+    r(4) = mean(o(allY > 0) < eer);
     disp(i);
     disp(r);
 end

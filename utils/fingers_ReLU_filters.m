@@ -17,11 +17,27 @@ y = wholeNet.nets{1}.compute(allX);
 for i = 1:80
     hist([y{1}(i,:) y{2}(i,:)], 30);
     pause;
-end    
+end
 
-subplot(1,1,1)
-y = wholeNet.compute(allX);
 
-histogram(y(allY > 0), 'binWidth', 0.05);
+
+[allX, allY] = trainOpts.batchFn(X, Y, inf, []);
+o = wholeNet.compute(allX);
+eer = fminsearch(@(t) abs(mean(o(allY == 0)<t) - mean(o(allY > 0)>=t)), double(mean(o)));
+subplot(2,1,1)
+hold off
+histogram(o(allY > 0), 'binWidth', 0.02);
 hold on
-histogram(y(allY == 0), 'binWidth', 0.05);
+histogram(o(allY == 0), 'binWidth', 0.02);
+plot(eer, 0, 'r*')
+hold off
+
+[allX, allY] = trainOpts.batchFn(Xv, Yv, inf, []);
+o = wholeNet.compute(allX);
+subplot(2,1,2)
+hold off
+histogram(o(allY > 0), 'binWidth', 0.02);
+hold on
+histogram(o(allY == 0), 'binWidth', 0.02);
+plot(eer, 0, 'r*')
+hold off
