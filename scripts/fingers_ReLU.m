@@ -68,39 +68,39 @@ trainOpts = struct(...
     'displayEvery', 3);
 
 for i = 1:1%nFolds % Cross-validation loop
-    extractionNet = MultiLayerNet();
-    
-    % Filter layers
-    patchMaker    = PatchNet([h, w], patchSz, overlap);
-    extractionNet.add(patchMaker);
-    extractionNet.freezeBelow(1);% don't train patch extraction
-    
-    rbm = RELURBM(prod(patchSz), 50, ...
-        RBM1pretrainingOpts, RBM1trainOpts, false);
-    imRedux = SiameseNet(rbm, numel(patchMaker.outsize()));
-    extractionNet.add(imRedux);
-    
-    % Pretraining for bottom layers
-    pretrainIdx = unique([dataset.pretrain_x; ...
-                dataset.train_x{i}(:,1); ...
-                dataset.train_x{i}(:,2)]);
-    extractionNet.pretrain(dataset.X(:,:, pretrainIdx));
-    
-    patchMerge = ReshapeNet(extractionNet, ...
-        sum(cellfun(@prod, extractionNet.outsize())));
-    extractionNet.add(patchMerge);
-
-    % Dimension reduction layers
-    rbm = RELURBM(extractionNet.outsize(), 500, ...
-        RBM2pretrainingOpts, RBM2trainOpts, true);
-    extractionNet.add(rbm);
-    
-    rbm = RELURBM(extractionNet.outsize(), 200, ...
-        RBM2pretrainingOpts, RBM3trainOpts, true);
-    extractionNet.add(rbm);
-    rbm = RELURBM(extractionNet.outsize(), 200, ...
-        RBM3pretrainingOpts, RBM4trainOpts, true);
-    extractionNet.add(rbm);
+%     extractionNet = MultiLayerNet();
+%     
+%     % Filter layers
+%     patchMaker    = PatchNet([h, w], patchSz, overlap);
+%     extractionNet.add(patchMaker);
+%     extractionNet.freezeBelow(1);% don't train patch extraction
+%     
+%     rbm = RELURBM(prod(patchSz), 50, ...
+%         RBM1pretrainingOpts, RBM1trainOpts, false);
+%     imRedux = SiameseNet(rbm, numel(patchMaker.outsize()));
+%     extractionNet.add(imRedux);
+%     
+%     % Pretraining for bottom layers
+%     pretrainIdx = unique([dataset.pretrain_x; ...
+%                 dataset.train_x{i}(:,1); ...
+%                 dataset.train_x{i}(:,2)]);
+%     extractionNet.pretrain(dataset.X(:,:, pretrainIdx));
+%     
+%     patchMerge = ReshapeNet(extractionNet, ...
+%         sum(cellfun(@prod, extractionNet.outsize())));
+%     extractionNet.add(patchMerge);
+% 
+%     % Dimension reduction layers
+%     rbm = RELURBM(extractionNet.outsize(), 500, ...
+%         RBM2pretrainingOpts, RBM2trainOpts, true);
+%     extractionNet.add(rbm);
+%     
+%     rbm = RELURBM(extractionNet.outsize(), 200, ...
+%         RBM2pretrainingOpts, RBM3trainOpts, true);
+%     extractionNet.add(rbm);
+%     rbm = RELURBM(extractionNet.outsize(), 200, ...
+%         RBM3pretrainingOpts, RBM4trainOpts, true);
+%     extractionNet.add(rbm);
     
     extractionNet.nets{2}.net.trainOpts.lRate   = RBM1trainOpts.lRate;
     extractionNet.nets{4}.trainOpts.lRate       = RBM2trainOpts.lRate;
@@ -114,7 +114,7 @@ for i = 1:1%nFolds % Cross-validation loop
     % Combined network
     compareNet = SiameseNet(extractionNet, 2);
     wholeNet   = MultiLayerNet();
-    metric     = JaccardDistance(extractionNet.outsize(), 0.01);
+    metric     = JaccardDistance(extractionNet.outsize(), 0.1);
     wholeNet.add(compareNet);
     wholeNet.add(metric);
     
