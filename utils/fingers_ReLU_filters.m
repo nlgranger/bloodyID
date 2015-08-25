@@ -9,6 +9,8 @@ for i=1:150;
     axis image
     colorbar
     pause;
+    disp(mean(abs(extractionNet.nets{2}.net.W(:, i) ...
+        - wholeNet.nets{1}.net.nets{2}.net.W(:, i))));
 end
 
 subplot(1,1,1)
@@ -23,12 +25,12 @@ end
 
 [allX, allY] = trainOpts.batchFn(X, Y, inf, []);
 o = wholeNet.compute(allX);
-eer = fminsearch(@(t) abs(mean(o(allY == 0)<t) - mean(o(allY > 0)>=t)), double(mean(o)));
+eer = fminsearch(@(t) abs(mean(o(allY < 0.5)<t) - mean(o(allY > 0.5)>=t)), double(mean(o)));
 subplot(2,1,1)
 hold off
-histogram(o(allY > 0), 'binWidth', 0.02);
+histogram(o(allY > 0.5), 'binWidth', 0.02);
 hold on
-histogram(o(allY == 0), 'binWidth', 0.02);
+histogram(o(allY < 0.5), 'binWidth', 0.02);
 plot(eer, 0, 'r*')
 hold off
 
@@ -38,6 +40,6 @@ subplot(2,1,2)
 hold off
 histogram(o(allY > 0), 'binWidth', 0.02);
 hold on
-histogram(o(allY == 0), 'binWidth', 0.02);
+histogram(o(allY < 0.5), 'binWidth', 0.02);
 plot(eer, 0, 'r*')
 hold off
