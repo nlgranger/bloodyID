@@ -37,6 +37,7 @@ trainRatio   = partition(1);
 valRatio     = partition(2);
 nMatching    = pairing(1);
 nNonMatching = pairing(2);
+damageThres  = 0;
 
 assert(mod(numel(varargin), 2) == 0, 'options should be ''name'', value pairs');
 for i = 1:2:numel(varargin)
@@ -48,6 +49,8 @@ for i = 1:2:numel(varargin)
         nFolds = varargin{i+1};
     elseif strcmp(varargin{i}, 'preprocessed')
         preprocessed = varargin{i+1};
+    elseif strcmp(varargin{i}, 'damageThres')
+        damageThres = varargin{i+1};
     else
         error('unknown option ''%s''', varargin{i});
     end
@@ -80,12 +83,14 @@ if ~(exist('preprocessed', 'var') && exist(preprocessed, 'file'))
         if numel(O) == 0
             warning('rejected finger %d', i);
             keep(i) = false;
+        elseif sum(sum(Ma)) < damageThres * numel(Ma)
+            
         else
             X(:,:,i) = imresize(O, [h w]);
             M(:,:,i) = imresize(Ma, [h w]);
         end
     end
-    rejected = X(:,:, ~keep);%#ok
+    rejected = X(:,:, ~keep);
     X = X(:,:,keep);
     M = M(:,:,keep);
     S = S(keep);
@@ -96,6 +101,30 @@ else
     load(preprocessed);
 end
 
+
+% Clear obviously damaged images
+
+cumSum = squeeze(sum(sum(M, 1), 2));
+keep   = true(numel(cumSum), 1);
+for id = 1:312
+    fromS1 = find(I == id & S == 1, 6);
+    fromS2 = find(I == id & S == 2, 6);
+    m1 = mean(cumSum(fromS1));
+    m2 = mean(cumSum(fromS2));
+    d1 = cumSum(fromS1) < max(0.95 * m1, 0.90 * m2);
+    d2 = cumSum(fromS2) < max(0.90 * m1, 0.95 * m2);
+    keep(fromS1(d1)) = false;
+    keep(fromS2(d2)) = false;
+end
+
+if any(~keep)
+    warning('dropped %d damaged', sum(~keep));
+    rejected = cat(3, rejected, X(:,:, ~keep));%#ok
+    X = X(:,:,keep);
+    M = M(:,:,keep);
+    S = S(keep);
+    I = I(keep);
+end
 
 % Partitionning ------------------------------------------------------------- %
 

@@ -43,3 +43,61 @@ hold on
 histogram(o(allY < 0.5), 'binWidth', 0.02);
 plot(eer, 0, 'r*')
 hold off
+
+colormap gray;
+o = wholeNet.compute(allX);
+eer = fminsearch(@(t) abs(mean(o(allY == 0) < t) ...
+    - mean(o(allY > 0) >= t)), double(mean(o)));
+m = (o > eer) ~= (allY > 0);
+
+for posErr = find(m & (allY > 0.5))
+    colormap gray;
+   subplot(2, 2, 1);
+   imagesc(allX{1}(:,:,posErr));
+   colorbar
+   axis image;
+   subplot(2, 2, 3);
+   imagesc(allX{2}(:,:,posErr));
+   colorbar
+   axis image;
+   subplot(2, 2, [2; 4]);
+   p = wholeNet.nets{1}.net.compute(allX{1}(:,:,posErr));
+   n = wholeNet.nets{1}.net.compute(allX{2}(:,:,posErr));
+   newplot
+   hold on;
+   bh = bar(p, 'r');
+   set(bh,'edgecolor','none');
+   bh = bar(-n, 'g');
+   set(bh,'edgecolor','none');
+   bh = bar(p-n, 'b');
+   set(bh,'edgecolor','none');
+   hold off
+   title(sprintf('%e < %e\n', o(posErr), eer));
+   pause
+end
+
+for negErr = find(m & (allY < 0.5))
+    colormap gray;
+   subplot(2, 2, 1);
+   imagesc(allX{1}(:,:,negErr));
+   colorbar
+   axis image;
+   subplot(2, 2, 3);
+   imagesc(allX{2}(:,:,negErr));
+   colorbar
+   axis image;
+   subplot(2, 2, [2; 4]);
+   p = wholeNet.nets{1}.net.compute(allX{1}(:,:,negErr));
+   n = wholeNet.nets{1}.net.compute(allX{2}(:,:,negErr));
+   newplot
+   hold on;
+   bh = bar(p, 'r');
+   set(bh,'edgecolor','none');
+   bh = bar(-n, 'g');
+   set(bh,'edgecolor','none');
+   bh = bar(p-n, 'b');
+   set(bh,'edgecolor','none');
+   hold off
+   title(sprintf('%e > %e\n', o(negErr), eer));
+   pause
+end

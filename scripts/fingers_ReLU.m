@@ -5,8 +5,8 @@ ratio        = 2.3;
 w            = round(ratio*h);
 nMatching    = 4; % number of matching pairs for each image
 nNonMatching = 7; % number of non matching pairs for each image
-patchSz      = [19 19];
-overlap      = [15 15];
+patchSz      = [16 16];
+overlap      = [13 13];
 nFolds       = 10;
 
 %% load initial data
@@ -28,14 +28,15 @@ end
 RBM1pretrainingOpts = struct( ...
     'lRate', 1e-5, ...
     'momentum', 0.5, ...
-    'nEpochs', 100, ...
+    'nEpochs', 70, ...
     'batchSz', 400, ...
-    'dropVis', 0.3, ...
+    'dropVis', 0.4, ...
+    'dropout', 0.2, ...
     'selectivity', 10, ...
     'selectAfter', 25, ...
     'displayEvery', 10);
 RBM1trainOpts = struct( ...
-    'lRate', 1e-3);
+    'lRate', 8e-3);
 
 % fusion RBM
 RBM2pretrainingOpts = struct( ...
@@ -47,17 +48,17 @@ RBM2pretrainingOpts = struct( ...
     'displayEvery', 10);
 RBM2trainOpts = struct( ...
     'dropout', 0.1, ...
-    'lRate', 1e-3);
+    'lRate', 8e-3);
 
 RBM3pretrainingOpts = struct();
 RBM3trainOpts = struct( ...
     'dropout', 0.2, ...
-    'lRate', 1e-3);
+    'lRate', 8e-3);
 
 RBM4pretrainingOpts = struct();
 RBM4trainOpts = struct( ...
     'dropout', 0.3, ...
-    'lRate', 1e-3);
+    'lRate', 8e-3);
 
 %% Training
 
@@ -68,39 +69,39 @@ trainOpts = struct(...
     'displayEvery', 3);
 
 for i = 1:1%nFolds % Cross-validation loop
-%     extractionNet = MultiLayerNet();
-%     
-%     % Filter layers
-%     patchMaker    = PatchNet([h, w], patchSz, overlap);
-%     extractionNet.add(patchMaker);
-%     extractionNet.freezeBelow(1);% don't train patch extraction
-%     
-%     rbm = RELURBM(prod(patchSz), 50, ...
-%         RBM1pretrainingOpts, RBM1trainOpts, false);
-%     imRedux = SiameseNet(rbm, numel(patchMaker.outsize()));
-%     extractionNet.add(imRedux);
-%     
-%     % Pretraining for bottom layers
-%     pretrainIdx = unique([dataset.pretrain_x; ...
-%                 dataset.train_x{i}(:,1); ...
-%                 dataset.train_x{i}(:,2)]);
-%     extractionNet.pretrain(dataset.X(:,:, pretrainIdx));
-%     
-%     patchMerge = ReshapeNet(extractionNet, ...
-%         sum(cellfun(@prod, extractionNet.outsize())));
-%     extractionNet.add(patchMerge);
-% 
-%     % Dimension reduction layers
-%     rbm = RELURBM(extractionNet.outsize(), 500, ...
-%         RBM2pretrainingOpts, RBM2trainOpts, true);
-%     extractionNet.add(rbm);
-%     
-%     rbm = RELURBM(extractionNet.outsize(), 200, ...
-%         RBM2pretrainingOpts, RBM3trainOpts, true);
-%     extractionNet.add(rbm);
-%     rbm = RELURBM(extractionNet.outsize(), 200, ...
-%         RBM3pretrainingOpts, RBM4trainOpts, true);
-%     extractionNet.add(rbm);
+    extractionNet = MultiLayerNet();
+    
+    % Filter layers
+    patchMaker    = PatchNet([h, w], patchSz, overlap);
+    extractionNet.add(patchMaker);
+    extractionNet.freezeBelow(1);% don't train patch extraction
+    
+    rbm = RELURBM(prod(patchSz), 30, ...
+        RBM1pretrainingOpts, RBM1trainOpts, false);
+    imRedux = SiameseNet(rbm, numel(patchMaker.outsize()));
+    extractionNet.add(imRedux);
+    
+    % Pretraining for bottom layers
+    pretrainIdx = unique([dataset.pretrain_x; ...
+                dataset.train_x{i}(:,1); ...
+                dataset.train_x{i}(:,2)]);
+    extractionNet.pretrain(dataset.X(:,:, pretrainIdx));
+    
+    patchMerge = ReshapeNet(extractionNet, ...
+        sum(cellfun(@prod, extractionNet.outsize())));
+    extractionNet.add(patchMerge);
+
+    % Dimension reduction layers
+    rbm = RELURBM(extractionNet.outsize(), 500, ...
+        RBM2pretrainingOpts, RBM2trainOpts, true);
+    extractionNet.add(rbm);
+    
+    rbm = RELURBM(extractionNet.outsize(), 200, ...
+        RBM2pretrainingOpts, RBM3trainOpts, true);
+    extractionNet.add(rbm);
+    rbm = RELURBM(extractionNet.outsize(), 200, ...
+        RBM3pretrainingOpts, RBM4trainOpts, true);
+    extractionNet.add(rbm);
     
     extractionNet.nets{2}.net.trainOpts.lRate   = RBM1trainOpts.lRate;
     extractionNet.nets{4}.trainOpts.lRate       = RBM2trainOpts.lRate;
@@ -114,7 +115,7 @@ for i = 1:1%nFolds % Cross-validation loop
     % Combined network
     compareNet = SiameseNet(extractionNet, 2);
     wholeNet   = MultiLayerNet();
-    metric     = JaccardDistance(extractionNet.outsize(), 0.1);
+    metric     = JaccardDistance(extractionNet.outsize(), 1); % <<<<<<<------------------------- METRIC
     wholeNet.add(compareNet);
     wholeNet.add(metric);
     
@@ -124,7 +125,7 @@ for i = 1:1%nFolds % Cross-validation loop
     %Y = 0.8 * single(~dataset.train_y{i})' + 0.1;
     %Y = single(~dataset.train_y{i})';
     Y = ~dataset.train_y{i}';
-    train(wholeNet, @contrastiveLoss, X, Y, trainOpts);
+    train(wholeNet, @expCost, X, Y, trainOpts); % <<<<<<<<<<<<<<-------------------------------- Training
     r = zeros(1, 4);
     
     % Training performances

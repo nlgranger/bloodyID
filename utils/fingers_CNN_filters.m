@@ -1,6 +1,11 @@
 colormap gray; 
-for i=1:16
+for i=1:net.nets{1}.net.nets{1}.nFilters
+    subplot(2, 1, 1)
     imagesc(net.nets{1}.net.nets{1}.filters(:,:, i));
+    axis image
+    colorbar;
+    subplot(2, 1, 2)
+    imagesc(filters(:,:, i));
     axis image
     colorbar;
     pause;
@@ -48,3 +53,24 @@ for negErr = find(m & (allY == 0))
    fprintf('%e > %e\n', o(negErr), eer);
    pause
 end
+
+[allX, allY] = trainOpts.batchFn(X, Y, inf, []);
+o = wholeNet.compute(allX);
+eer = fminsearch(@(t) abs(mean(o(allY == 0)<t) - mean(o(allY > 0)>=t)), double(mean(o)));
+subplot(1,2,1)
+hold off
+histogram(o(allY > 0), 'binWidth', 0.005);
+hold on
+histogram(o(allY == 0), 'binWidth', 0.005);
+plot(eer, 0, 'r*')
+hold off
+
+[allX, allY] = trainOpts.batchFn(Xv, Yv, inf, []);
+o = wholeNet.compute(allX);
+subplot(1,2,2)
+hold off
+histogram(o(allY > 0), 'binWidth', 0.005);
+hold on
+histogram(o(allY == 0), 'binWidth', 0.005);
+plot(eer, 0, 'r*')
+hold off
