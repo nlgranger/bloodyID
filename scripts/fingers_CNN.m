@@ -11,6 +11,7 @@ nFolds       = 7;
 % CNN requires single precision input!
 if exist('data/hk_original/dataset_small.mat', 'file')
     load('data/hk_original/dataset_small.mat');
+    dataset.X = single(padarray(dataset.X, [6 7 0], -1));
 else
     dataset = make_dataset('data/hk_original', [h w], [0.7 0], [5 5], ...
         'preprocessed', 'data/hk_original/preprocessed_small.mat', ...
@@ -29,7 +30,7 @@ end
 extractionNet = MultiLayerNet();
 
 trainOpts = struct('lRate', 1e-3, 'dropout', 0.1);
-cnn = CNN([47 95], [16 16], 30, trainOpts, 'pool', [2 2]);
+cnn = CNN([47 95], [12 12], 30, trainOpts, 'pool', [4 4]);
 % L = [3.5, 4.2];
 % for j = 1:numel(L)
 %     l = L(j);
@@ -44,7 +45,7 @@ clear filters;
 extractionNet.add(cnn);
 
 trainOpts = struct('lRate', 1e-3, 'dropout', 0.1);
-cnn       = CNN(extractionNet.outsize(), [3 9], 30, trainOpts, 'pool', [2 4]);
+cnn       = CNN(extractionNet.outsize(), [3 3], 30, trainOpts);
 extractionNet.add(cnn);
 
 concat = ReshapeNet(extractionNet, prod(extractionNet.outsize()));
