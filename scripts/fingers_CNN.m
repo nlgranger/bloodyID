@@ -29,7 +29,7 @@ end
 
 extractionNet = MultiLayerNet();
 
-trainOpts = struct('lRate', 1e-3, 'dropout', 0.1);
+trainOpts = struct('lRate', 2e-4, 'dropout', 0.1);
 cnn = CNN([47 95], [12 12], 30, trainOpts, 'pool', [4 4]);
 % L = [3.5, 4.2];
 % for j = 1:numel(L)
@@ -44,7 +44,7 @@ cnn.filters = single(filters);
 clear filters;
 extractionNet.add(cnn);
 
-trainOpts = struct('lRate', 1e-3, 'dropout', 0.1);
+trainOpts = struct('lRate', 2e-4, 'dropout', 0.2);
 cnn       = CNN(extractionNet.outsize(), [3 3], 30, trainOpts);
 extractionNet.add(cnn);
 
@@ -90,20 +90,26 @@ for i = 1:nFolds
     for j = 1:3
         % Train for a few iterations
         train(net, @expCost, X, Y, trainOpts); %<<<<<<<<<<<<<<---------- TRAIN
-
+        
         r = zeros(1, 4);
         % Training performances
-        [allX, allY] = trainOpts.batchFn(X, Y, inf, []);
-        o = net.compute(allX);
-        eer = fminsearch(@(t) abs(mean(o(allY < 0.5) < t) ...
-            - mean(o(allY > 0.5) >= t)), double(mean(o)));
+        [batchX, allY, idx] = trainOpts.batchFn(X, Y, 2000, []);
+        o    = [];
+        while ~isempty(idx)
+            o = [o net.compute(batchX)];
+            [batchX, batchY, idx] = trainOpts.batchFn(X, Y, 2000, idx);
+            allY = [allY batchY];
+        end
+        o = [o net.compute(batchX)];
+        eer  = fminsearch(@(t) abs(mean(o(allY < 0.5) < t) ...
+             - mean(o(allY > 0.5) >= t)), double(mean(o)));
         r(1) = mean(o(allY > 0.5) < eer);
         r(2) = mean(o(allY < 0.5) > eer);
         subplot(3,2,2*j-1)
         hold off
-        histogram(o(allY > 0.5), 'binWidth', 0.02);
+        histogram(o(allY > 0.5), 'binWidth', 0.05);
         hold on
-        histogram(o(allY < 0.5), 'binWidth', 0.02);
+        histogram(o(allY < 0.5), 'binWidth', 0.05);
         plot(eer, 0, 'r*')
         hold off
 
@@ -114,9 +120,9 @@ for i = 1:nFolds
         r(4) = mean(o(allY < 0.5) > eer);        
         subplot(3, 2, 2*j)
         hold off
-        histogram(o(allY > 0.5), 'binWidth', 0.02);
+        histogram(o(allY > 0.5), 'binWidth', 0.05);
         hold on
-        histogram(o(allY < 0.5), 'binWidth', 0.02);
+        histogram(o(allY < 0.5), 'binWidth', 0.05);
         plot(eer, 0, 'r*')
         hold off
         drawnow
